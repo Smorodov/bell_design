@@ -1,0 +1,39 @@
+Build started at 17.07.2026 12:37:36,36 
+-- Using the multi-header code from E:/projects/bell_optimizer/build/_deps/json-src/include/
+-- Version: 10.2.1
+-- Build type: Release
+-- 
+-- ========================================
+-- BellOptimizer Configuration:
+--   Build Type:     Release
+--   C++ Standard:   17
+--   GSL:            E:/msys64/ucrt64/include
+--   NLopt:          FOUND
+--   JSON:           FOUND (FetchContent)
+--   FMT:            FOUND (FetchContent)
+-- ========================================
+-- 
+-- FFTW3 found:
+--   Include: E:/msys64/ucrt64/bin/../include
+--   Library: fftw3
+-- OpenMP found, enabling parallelization
+-- 
+-- ========================================
+-- BellSynthesizer Configuration:
+--   Build Type:     Release
+--   C++ Standard:   17
+--   Eigen3 Include: 
+--   OpenMP:         -fopenmp
+--   FFTW:           Enabled
+--   JSON:           FOUND
+--   FMT:            FOUND
+-- ========================================
+-- 
+-- Configuring done (4.1s)
+-- Generating done (0.1s)
+-- Build files have been written to: E:/projects/bell_optimizer/build
+[ 30%] Built target fmt
+[ 70%] Built target bell_opt
+[ 80%] Building CXX object bell_synth/CMakeFiles/bell_synth.dir/src/bell_synthesis.cpp.obj
+[ 90%] Linking CXX executable ..\bell_synth.exe
+[100%] Built target bell_synth

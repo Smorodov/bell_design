@@ -1,0 +1,40 @@
+Build started at 17.07.2026  8:25:47,97 
+-- The C compiler identification is GNU 16.1.0
+-- The CXX compiler identification is GNU 16.1.0
+-- Detecting C compiler ABI info
+-- Detecting C compiler ABI info - done
+-- Check for working C compiler: E:/msys64/ucrt64/bin/cc.exe - skipped
+-- Detecting C compile features
+-- Detecting C compile features - done
+-- Detecting CXX compiler ABI info
+-- Detecting CXX compiler ABI info - done
+-- Check for working CXX compiler: E:/msys64/ucrt64/bin/c++.exe - skipped
+-- Detecting CXX compile features
+-- Detecting CXX compile features - done
+-- Found PkgConfig: E:/msys64/ucrt64/bin/pkg-config.exe (found version "2.5.1")
+-- Checking for module 'fftw3'
+--   Found fftw3, version 3.3.11
+-- FFTW3 found:
+--   Include: E:/msys64/ucrt64/bin/../include
+--   Library: fftw3
+-- Found OpenMP_C: -fopenmp (found version "5.2")
+-- Found OpenMP_CXX: -fopenmp (found version "5.2")
+-- Found OpenMP: TRUE (found version "5.2")
+-- OpenMP found, enabling parallelization
+-- 
+-- ========================================
+-- BellSynthesizer Configuration:
+--   Build Type:     Release
+--   C++ Standard:   17
+--   Eigen3 Include: 
+--   OpenMP:         -fopenmp
+--   FFTW:           Enabled
+-- ========================================
+-- 
+-- Configuring done (7.0s)
+-- Generating done (0.0s)
+-- Build files have been written to: E:/projects/bell_optimizer/bell_synth/build
+[ 33%] Building CXX object CMakeFiles/bell_synth.dir/src/main.cpp.obj
+[ 66%] Building CXX object CMakeFiles/bell_synth.dir/src/bell_synthesis.cpp.obj
+[100%] Linking CXX executable bell_synth.exe
+[100%] Built target bell_synth

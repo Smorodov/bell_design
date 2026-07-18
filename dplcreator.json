@@ -1,0 +1,42 @@
+{
+    "general": {
+        "output": "project.dpl.txt",
+        "include_hidden": false,
+        "debug": false
+    },
+    "include": {
+        "patterns": [
+            "**/*.[ch](pp|)",
+            "**/CMakeLists.txt",
+            "**/Makefile",
+            "**/README.md"
+        ],
+        "extensions": []
+    },
+    "exclude": {
+        "files": [
+            "*.exe",
+            "*.dll"
+        ],
+        "dirs": [
+"DPL_tools",
+            ".git",
+            ".svn",
+            ".vs",
+            ".vscode",
+            "node_modules",
+            "build",
+            "Debug",
+            "Release",
+            "x64",
+            "x86",
+            "bin",
+            "obj",
+            "packages",
+            "__pycache__",
+            ".cache",
+            "dist",
+            "out"
+        ]
+    }
+}

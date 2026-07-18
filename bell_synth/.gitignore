@@ -1,0 +1,48 @@
+# Build artifacts
+build/
+*.o
+*.obj
+*.exe
+*.dll
+*.so
+*.dylib
+*.a
+*.lib
+
+# CMake
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+Makefile
+compile_commands.json
+
+# DPL tools (excluded)
+DPL_tools/
+*.dpl
+dplcreator.cfg
+
+# Logs and temp files
+*.log
+test_results_*.log
+*_protocol_*.txt
+*.tmp
+*.temp
+
+# Scripts (except main ones)
+create.cmd
+run_patch.cmd
+
+# Models (will be in Git LFS)
+models/*.gguf
+models/*.bin
+models/*.safetensors
+.cache/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
