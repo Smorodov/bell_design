@@ -17,7 +17,7 @@
 // ВСПОМОГАТЕЛЬНАЯ СТРУКТУРА ДЛЯ ИНТЕГРАТОРА
 // ============================================================
 struct IntegrandParams {
-    const BellGenerator* generator;
+    BellGenerator* generator;  // УБРАЛИ const
 };
 
 static double integrand_wrapper_parametric(double t, void* params) {
@@ -140,7 +140,7 @@ bool BellGenerator::buildSpline() {
 // ============================================================
 // ИНТЕГРАНТ ДЛЯ ДЛИНЫ ДУГИ
 // ============================================================
-double BellGenerator::integrandParametric(double t) const {
+double BellGenerator::integrandParametric(double t) {  // УБРАЛИ const
     if (!spline_) return 0.0;
     double z = t * geometry_.H;
     double dr_dz = derivative(z);
@@ -164,7 +164,7 @@ double BellGenerator::computeArcLengthToT(double t_target) const {
     if (t_clamped < 1e-12) return 0.0;
     
     IntegrandParams params;
-    params.generator = this;
+    params.generator = const_cast<BellGenerator*>(this);  // Исправлено
     
     gsl_function F;
     F.function = integrand_wrapper_parametric;
@@ -250,14 +250,14 @@ double BellGenerator::getZfromS(double s) const {
 // РАДИУС, ПРОИЗВОДНАЯ, ТОЛЩИНА
 // ============================================================
 double BellGenerator::radius(double z) const {
-    if (!spline_) return 0.0;
+    if (!spline_) return 0.0;  // ДОБАВИЛИ ПРОВЕРКУ
     if (z <= 0.0) return 0.0;
     if (z >= geometry_.H) return geometry_.R_mouth;
     return gsl_spline_eval(spline_, z, acc_);
 }
 
 double BellGenerator::derivative(double z) const {
-    if (!spline_) return 0.0;
+    if (!spline_) return 0.0;  // ДОБАВИЛИ ПРОВЕРКУ
     if (z <= 0.0) return 0.0;
     if (z >= geometry_.H) {
         return gsl_spline_eval_deriv(spline_, geometry_.H, acc_);
@@ -352,6 +352,12 @@ void BellGenerator::computeInnerProfile(const std::vector<double>& n_r, const st
     int n = config_.nNodes;
     mesh_data_.inner_profile.clear();
     mesh_data_.inner_profile.reserve(n);
+    
+    // ДОБАВИЛИ ПРОВЕРКУ
+    if (n_r.size() < (size_t)n || n_z.size() < (size_t)n) {
+        logError("Normal vectors size mismatch");
+        return;
+    }
     
     for (int i = 0; i < n; ++i) {
         double z_outer = mesh_data_.outer_profile[i].z;

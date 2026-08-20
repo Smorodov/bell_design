@@ -1,5 +1,5 @@
-Build started at 17.07.2026 12:37:36,36 
--- Using the multi-header code from E:/projects/bell_optimizer/build/_deps/json-src/include/
+Build started at 20.08.2026 16:21:08,24 
+-- Using the multi-header code from E:/projects/bell/bell_optimizer/build/_deps/json-src/include/
 -- Version: 10.2.1
 -- Build type: Release
 -- 
@@ -27,13 +27,15 @@ Build started at 17.07.2026 12:37:36,36
 --   FFTW:           Enabled
 --   JSON:           FOUND
 --   FMT:            FOUND
+--   PolyBLEP:       INCLUDED
 -- ========================================
 -- 
--- Configuring done (4.1s)
+-- Configuring done (3.9s)
 -- Generating done (0.1s)
--- Build files have been written to: E:/projects/bell_optimizer/build
-[ 30%] Built target fmt
-[ 70%] Built target bell_opt
-[ 80%] Building CXX object bell_synth/CMakeFiles/bell_synth.dir/src/bell_synthesis.cpp.obj
+-- Build files have been written to: E:/projects/bell/bell_optimizer/build
+[ 27%] Built target fmt
+[ 63%] Built target bell_opt
+[ 72%] Building CXX object bell_synth/CMakeFiles/bell_synth.dir/src/main.cpp.obj
+[ 81%] Building CXX object bell_synth/CMakeFiles/bell_synth.dir/src/bell_synthesis.cpp.obj
 [ 90%] Linking CXX executable ..\bell_synth.exe
 [100%] Built target bell_synth

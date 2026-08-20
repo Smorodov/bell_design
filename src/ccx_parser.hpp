@@ -115,6 +115,8 @@ public:
                         if (mode.frequency_hz > 0.5) {
                             data.modes.push_back(mode);
                         }
+                    } else {
+                        continue;  // ДОБАВИЛИ ПРОВЕРКУ
                     }
                 }
             }
@@ -143,6 +145,8 @@ public:
                                 break;
                             }
                         }
+                    } else {
+                        continue;  // ДОБАВИЛИ ПРОВЕРКУ
                     }
                 }
             }
@@ -171,6 +175,8 @@ public:
                                 break;
                             }
                         }
+                    } else {
+                        continue;  // ДОБАВИЛИ ПРОВЕРКУ
                     }
                 }
             }
@@ -204,7 +210,7 @@ public:
             if (amp > max_amp) max_amp = amp;
         }
         
-        if (max_amp > 1e-10) {
+        if (max_amp > 1e-10) {  // ДОБАВИЛИ ПРОВЕРКУ
             for (auto& mode : data.modes) {
                 mode.amplitude = mode.effective_mass_norm / max_amp;
             }

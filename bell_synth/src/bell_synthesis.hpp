@@ -1,24 +1,18 @@
 // =============================================================================
-// bell_synthesis.hpp - ПАРАМЕТРЫ СИНТЕЗА ЗВУКА
+// bell_synthesis.hpp - ПАРАМЕТРЫ СИНТЕЗА ЗВУКА КОЛОКОЛА
 // =============================================================================
 #pragma once
 
 #include <vector>
 #include <string>
-#include <fstream>
-#include <iostream>
-#include <iomanip>
-#include <chrono>
-#include <cmath>
-#include <algorithm>
-#include <random>
-#include <numeric>
 #include <map>
-#include <complex>
+#include <memory>
+#include <cmath>
 
 #include <Eigen/Dense>
 
 #include "bell_constants.hpp"
+#include "PolyBLEP.h"
 
 namespace BellOptimizer {
 
@@ -55,70 +49,52 @@ struct GeometryParams {
 };
 
 struct SynthesisConfig {
+    // Основные параметры
     double duration = 5.0;
-    double fade_in = BellConstants::ATTACK_DURATION;
-    double fade_out = 0.2;
+    double fade_in = 0.003;
+    double fade_out = 0.3;
     
     int sample_rate = 48000;
     int oversample_factor = 4;
+    double max_frequency = 20000.0;
     
-    int max_overtone_count = 32;
-    double min_overtone_amplitude = BellConstants::MIN_AMPLITUDE;
-    double max_frequency = BellConstants::MAX_FREQUENCY;
-    
-    double t60_base = 8.0;
-    double alpha_damping = 0.0001;
-    double beta_damping = 0.05;
-    
-    bool use_mount_model = true;
-    double mount_damping = 0.2;
-    double mount_freq_shift = 0.98;
-    double mount_high_freq_attenuation = 0.8;
-    
-    bool use_acoustic_model = true;
-    bool use_acoustic_coupling = true;
-    bool use_helmholtz_resonance = true;
-    double helmholtz_amplitude = 0.04;
-    double helmholtz_damping = 0.3;
-    double radiation_efficiency = 0.4;
-    double radiation_damping_factor = 0.005;
-    
-    double reverb_mix = 0.12;
-    double reverb_delay = 0.1;
-    double reverb_feedback = 0.5;
-    
-    double target_peak = BellConstants::CLIP_LEVEL;
-    double target_rms = 0.35;
-    bool use_rms_normalization = true;
-    bool soft_clip = true;
-    
-    double impact_position = 0.72;
-    double impact_duration = 0.0003;
-    double impact_force = 1.0;
-    
-    double target_fundamental = 440.0;
-    std::vector<double> target_intervals = {
-        0.50, 0.75, 1.00, 1.25, 1.50, 2.00, 2.50, 3.00, 3.50, 4.00
-    };
-    std::vector<double> target_amplitudes = {
-        0.80, 0.40, 1.00, 0.60, 0.40, 0.30, 0.20, 0.15, 0.10, 0.08
-    };
-    
-    double min_frequency = BellConstants::MIN_FREQUENCY;
-    
-    std::string output_filename = "orthodox_bell.wav";
-    
-    double boost_amplitude = 0.2;
-    double boost_freq_factor = 0.5;
-    double slowdown_factor = 0.15;
-    
-    double loss_factor = 2e-4;
-    double nonlinear_damping = 0.5;
-    
+    double loss_factor = 0.0005;
+    double nonlinear_damping = 0.6;
+    double tail_factor = 1.2;
     double envelope_table_step = 0.001;
     
-    double envelope_threshold = 1e-3;
-    double tail_factor = 3.0;
+    double impact_force = 1.0;
+    double target_peak = 0.95;
+    double target_rms = 0.35;
+    bool use_rms_normalization = true;
+    
+    // Параметры обрезки тишины
+    double envelope_threshold = 0.00001;
+    bool use_tail_trimming = true;
+    
+    // Тип формы волны для PolyBLEP
+    enum class WaveformType {
+        SINE,
+        TRIANGLE,
+        SQUARE,
+        SAWTOOTH,
+        MIXED
+    };
+    WaveformType waveform_type = WaveformType::MIXED;
+    
+    // Реверберация
+    double reverb_mix = 0.05;
+    double reverb_delay = 0.02;
+    double reverb_feedback = 0.3;
+    
+    // Стерео-модуляция (для объёма)
+    bool use_stereo_modulation = false;
+    double stereo_depth = 0.002;
+    double stereo_rate = 0.15;
+    double stereo_mix = 0.25;
+    
+    double target_fundamental = 440.0;
+    std::string output_filename = "orthodox_bell.wav";
     
     SynthesisConfig() = default;
 };
@@ -128,28 +104,24 @@ public:
     BellSynthesizer(const SynthesisConfig& config);
     ~BellSynthesizer() = default;
     
+    // Основные методы
     void generate_modes(const GeometryParams& geo, const std::vector<Mode>& base_modes);
-    void generate_modes_from_params(const GeometryParams& geo);
-    
     void synthesize();
-    void add_reverb();
-    void apply_fade(double fade_in_time, double fade_out_time);
-    void normalize(double peak_level);
     
+    // Сохранение
     bool save_wav(const std::string& filename);
+    
+    // Анализ
     void analyze_spectrum(const std::vector<double>& frequencies);
     void print_spectrum(const std::vector<Mode>& modes) const;
-    
     void analyze_fft(int fft_size = 4096);
     void print_fft_peaks(const std::vector<double>& target_frequencies);
     void save_spectrum_csv(const std::string& filename, const std::vector<double>& target_frequencies);
-    
     void save_all_envelopes_csv(const std::string& filename);
     
+    // Геттеры
     const std::vector<double>& get_audio() const { return audio_; }
     const std::vector<Mode>& get_modes() const { return modes_; }
-    int get_modes_count() const { return static_cast<int>(modes_.size()); }
-    double get_optimal_impact_position() const { return config_.impact_position; }
     int get_sample_rate() const { return config_.sample_rate; }
     double get_actual_duration() const { return actual_duration_; }
     
@@ -160,20 +132,27 @@ private:
         double duration;
     };
     
+    // Внутренние методы
+    double calculate_natural_duration() const;
+    void precompute_envelopes(double duration);
+    void downsample_audio();
+    
+    PolyBLEP::Waveform select_waveform(double frequency) const;
+    void add_mode_with_polyblep(const Mode& mode, const EnvelopeData& envelope_data,
+                                std::vector<double>& buffer);
+    
     double calculate_decay_envelope(double time, const Mode& mode) const;
     double get_envelope_value(const EnvelopeData& data, double time) const;
-    void add_mode_to_audio(const Mode& mode, const EnvelopeData& envelope_data, std::vector<double>& buffer);
-    void precompute_envelopes();
-    std::vector<double> scale_envelope_to_duration(
-        const std::vector<double>& original_envelope,
-        double original_duration,
-        double target_duration,
-        const Mode& mode);
     
-    void apply_mount_filter();
-    void apply_acoustic_coupling();
-    void apply_helmholtz_resonance();
-    void apply_radiation_filter();
+    // ✅ НОВЫЙ МЕТОД ДЛЯ РАСЧЕТА ДЛИТЕЛЬНОСТИ ПО СУММАРНОЙ ОГИБАЮЩЕЙ
+    double calculate_actual_duration_from_envelopes(double threshold);
+    
+    // Эффекты
+    void add_reverb();
+    void apply_stereo_modulation(double depth, double rate, double mix);
+    void apply_fade(double fade_in_time, double fade_out_time);
+    void normalize(double peak_level);
+    void trim_silence(double threshold);
     
     void write_wav_header(std::ofstream& file, int data_size) const;
     
@@ -192,4 +171,4 @@ private:
     std::vector<double> fft_magnitudes_;
 };
 
-}
+} // namespace BellOptimizer

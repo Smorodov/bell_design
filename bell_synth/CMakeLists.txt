@@ -1,5 +1,5 @@
 # =============================================================================
-# CMakeLists.txt - СБОРКА ПРОЕКТА С FFTW
+# CMakeLists.txt - СБОРКА ПРОЕКТА С FFTW И POLYBLEP
 # =============================================================================
 
 cmake_minimum_required(VERSION 3.14)
@@ -16,7 +16,7 @@ set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
 # ---- ПОДКЛЮЧЕНИЕ ЗАВИСИМОСТЕЙ ЧЕРЕЗ INTERNET ----
 include(FetchContent)
 
-# nlohmann/json (если ещё не подключен)
+# nlohmann/json
 if(NOT TARGET nlohmann_json::nlohmann_json)
     FetchContent_Declare(
         json
@@ -26,7 +26,7 @@ if(NOT TARGET nlohmann_json::nlohmann_json)
     FetchContent_MakeAvailable(json)
 endif()
 
-# fmt (если ещё не подключен)
+# fmt
 if(NOT TARGET fmt::fmt)
     FetchContent_Declare(
         fmt
@@ -56,7 +56,7 @@ endif()
 # ---- ПОИСК EIGEN3 ----
 find_package(Eigen3 REQUIRED)
 
-# ---- ПОИСК FFTW (БЕЗ ЖЕСТКИХ ПУТЕЙ) ----
+# ---- ПОИСК FFTW ----
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(FFTW3 REQUIRED fftw3)
 
@@ -101,6 +101,15 @@ endif()
 add_executable(bell_synth
     src/main.cpp
     src/bell_synthesis.cpp
+    src/PolyBLEP.cpp
+    src/bell_constants.hpp
+    src/bell_synthesis.hpp
+    src/PolyBLEP.h
+)
+
+# ---- ИНКЛЮДЫ ----
+target_include_directories(bell_synth PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
 )
 
 # ---- EIGEN3 ----
@@ -121,18 +130,23 @@ target_link_libraries(bell_synth PRIVATE
     fmt::fmt
 )
 
+# ---- OPENMP ----
 target_link_libraries(bell_synth PRIVATE ${USE_OPENMP_LIBS})
 target_compile_options(bell_synth PRIVATE ${USE_OPENMP_FLAGS})
 
+# ---- WINDOWS ----
 if(WIN32)
     target_compile_definitions(bell_synth PRIVATE _USE_MATH_DEFINES)
+    # Для MSYS2/MinGW
+    if(MINGW)
+        target_link_libraries(bell_synth PRIVATE -lfftw3)
+    endif()
 endif()
 
-target_include_directories(bell_synth PRIVATE
-    ${CMAKE_CURRENT_SOURCE_DIR}/src
-)
+# =============================================================================
+# ИНФОРМАЦИЯ О СБОРКЕ
+# =============================================================================
 
-# ---- ИНФОРМАЦИЯ ----
 message(STATUS "")
 message(STATUS "========================================")
 message(STATUS "BellSynthesizer Configuration:")
@@ -151,5 +165,6 @@ if(TARGET fmt::fmt)
 else()
     message(STATUS "  FMT:            NOT FOUND")
 endif()
+message(STATUS "  PolyBLEP:       INCLUDED")
 message(STATUS "========================================")
 message(STATUS "")

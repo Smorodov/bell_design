@@ -1,6 +1,6 @@
-Build started at 17.07.2026  8:25:47,97 
--- The C compiler identification is GNU 16.1.0
--- The CXX compiler identification is GNU 16.1.0
+Build started at 20.08.2026 14:03:24,84 
+-- The C compiler identification is GNU 16.2.0
+-- The CXX compiler identification is GNU 16.2.0
 -- Detecting C compiler ABI info
 -- Detecting C compiler ABI info - done
 -- Check for working C compiler: E:/msys64/ucrt64/bin/cc.exe - skipped
@@ -11,30 +11,25 @@ Build started at 17.07.2026  8:25:47,97
 -- Check for working CXX compiler: E:/msys64/ucrt64/bin/c++.exe - skipped
 -- Detecting CXX compile features
 -- Detecting CXX compile features - done
--- Found PkgConfig: E:/msys64/ucrt64/bin/pkg-config.exe (found version "2.5.1")
--- Checking for module 'fftw3'
---   Found fftw3, version 3.3.11
--- FFTW3 found:
---   Include: E:/msys64/ucrt64/bin/../include
---   Library: fftw3
--- Found OpenMP_C: -fopenmp (found version "5.2")
--- Found OpenMP_CXX: -fopenmp (found version "5.2")
--- Found OpenMP: TRUE (found version "5.2")
--- OpenMP found, enabling parallelization
--- 
--- ========================================
--- BellSynthesizer Configuration:
---   Build Type:     Release
---   C++ Standard:   17
---   Eigen3 Include: 
---   OpenMP:         -fopenmp
---   FFTW:           Enabled
--- ========================================
--- 
--- Configuring done (7.0s)
--- Generating done (0.0s)
--- Build files have been written to: E:/projects/bell_optimizer/bell_synth/build
-[ 33%] Building CXX object CMakeFiles/bell_synth.dir/src/main.cpp.obj
-[ 66%] Building CXX object CMakeFiles/bell_synth.dir/src/bell_synthesis.cpp.obj
-[100%] Linking CXX executable bell_synth.exe
-[100%] Built target bell_synth
+[ 11%] Creating directories for 'json-populate'
+[ 22%] Performing download step (git clone) for 'json-populate'
+Cloning into 'json-src'...
+fatal: fetch-pack: invalid index-pack output
+fetch-pack: unexpected disconnect while reading sideband packet
+Cloning into 'json-src'...
+fatal: fetch-pack: invalid index-pack output
+fetch-pack: unexpected disconnect while reading sideband packet
+^CUser interrupt
+CMake Error: Generator: build tool execution failed, command was: E:/msys64/ucrt64/bin/mingw32-make.exe -f Makefile
+
+CMake Error at E:/msys64/ucrt64/share/cmake/Modules/FetchContent.cmake:1933 (message):
+  Build step for json failed: User interrupt
+Call Stack (most recent call first):
+  E:/msys64/ucrt64/share/cmake/Modules/FetchContent.cmake:1622 (__FetchContent_populateSubbuild)
+  E:/msys64/ucrt64/share/cmake/Modules/FetchContent.cmake:2160:EVAL:2 (__FetchContent_doPopulation)
+  E:/msys64/ucrt64/share/cmake/Modules/FetchContent.cmake:2160 (cmake_language)
+  E:/msys64/ucrt64/share/cmake/Modules/FetchContent.cmake:2401 (__FetchContent_Populate)
+  CMakeLists.txt:26 (FetchContent_MakeAvailable)
+
+
+^C

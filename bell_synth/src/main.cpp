@@ -1,5 +1,5 @@
 // =============================================================================
-// main.cpp - СИНТЕЗ КОЛОКОЛА ИЗ .dat ФАЙЛА (С FFT)
+// main.cpp - СИНТЕЗ КОЛОКОЛА (POLYBLEP + REVERB + STEREO)
 // =============================================================================
 #include "bell_synthesis.hpp"
 #include "../../src/ccx_parser.hpp"
@@ -20,7 +20,7 @@ int main(int argc, char* argv[]) {
     #endif
 
     fmt::print("\n{:=^70}\n", "");
-    fmt::print("{:=^70}\n", "🔔 СИНТЕЗ КОЛОКОЛА ИЗ .dat (С FFT)");
+    fmt::print("{:=^70}\n", "🔔 СИНТЕЗ КОЛОКОЛА (POLYBLEP + REVERB + STEREO)");
     fmt::print("{:=^70}\n\n", "");
 
     std::string filename;
@@ -51,43 +51,56 @@ int main(int argc, char* argv[]) {
         if (config_file.is_open()) {
             json cfg = json::parse(config_file);
             
-            config.sample_rate = cfg.value("sample_rate", 96000);
-            config.oversample_factor = cfg.value("oversample_factor", 8);
+            // Основные параметры
+            config.sample_rate = cfg.value("sample_rate", 48000);
+            config.oversample_factor = cfg.value("oversample_factor", 4);
             config.duration = cfg.value("duration", 0.0);
-            config.fade_in = cfg.value("fade_in", 0.01);
-            config.fade_out = cfg.value("fade_out", 0.2);
-            config.loss_factor = cfg.value("loss_factor", 0.0002);
-            config.nonlinear_damping = cfg.value("nonlinear_damping", 0.5);
-            config.tail_factor = cfg.value("tail_factor", 3.0);
-            config.envelope_threshold = cfg.value("envelope_threshold", 0.001);
-            config.boost_amplitude = cfg.value("boost_amplitude", 0.0);
-            config.boost_freq_factor = cfg.value("boost_freq_factor", 0.5);
-            config.slowdown_factor = cfg.value("slowdown_factor", 0.15);
-            config.impact_position = cfg.value("impact_position", 0.70);
-            config.impact_duration = cfg.value("impact_duration", 0.0005);
+            config.fade_in = cfg.value("fade_in", 0.003);
+            config.fade_out = cfg.value("fade_out", 0.3);
+            config.loss_factor = cfg.value("loss_factor", 0.0005);
+            config.nonlinear_damping = cfg.value("nonlinear_damping", 0.6);
+            config.tail_factor = cfg.value("tail_factor", 1.2);
             config.impact_force = cfg.value("impact_force", 1.0);
-            config.max_frequency = cfg.value("max_frequency", 20000.0);
-            
-            config.use_acoustic_model = cfg.value("use_acoustic_model", false);
-            config.use_acoustic_coupling = cfg.value("use_acoustic_coupling", false);
-            config.use_helmholtz_resonance = cfg.value("use_helmholtz_resonance", false);
-            config.helmholtz_amplitude = cfg.value("helmholtz_amplitude", 0.04);
-            config.helmholtz_damping = cfg.value("helmholtz_damping", 0.3);
-            config.radiation_efficiency = cfg.value("radiation_efficiency", 0.4);
-            config.radiation_damping_factor = cfg.value("radiation_damping_factor", 0.005);
-            
-            config.use_mount_model = cfg.value("use_mount_model", false);
-            config.mount_damping = cfg.value("mount_damping", 0.2);
-            
-            config.reverb_mix = cfg.value("reverb_mix", 0.0);
-            config.reverb_delay = cfg.value("reverb_delay", 0.1);
-            config.reverb_feedback = cfg.value("reverb_feedback", 0.5);
-            
-            config.use_rms_normalization = cfg.value("use_rms_normalization", false);
-            config.target_rms = cfg.value("target_rms", 0.35);
             config.target_peak = cfg.value("target_peak", 0.95);
             
+            // Параметры обрезки тишины
+            config.envelope_threshold = cfg.value("envelope_threshold", 0.00001);
+            config.use_tail_trimming = cfg.value("use_tail_trimming", true);
+            
+            // Реверберация
+            config.reverb_mix = cfg.value("reverb_mix", 0.05);
+            config.reverb_delay = cfg.value("reverb_delay", 0.02);
+            config.reverb_feedback = cfg.value("reverb_feedback", 0.3);
+            
+            // Стерео-модуляция
+            config.use_stereo_modulation = cfg.value("use_stereo_modulation", false);
+            config.stereo_depth = cfg.value("stereo_depth", 0.002);
+            config.stereo_rate = cfg.value("stereo_rate", 0.15);
+            config.stereo_mix = cfg.value("stereo_mix", 0.25);
+            
+            // Waveform type
+            std::string waveform_str = cfg.value("waveform_type", "mixed");
+            if (waveform_str == "sine") {
+                config.waveform_type = SynthesisConfig::WaveformType::SINE;
+            } else if (waveform_str == "triangle") {
+                config.waveform_type = SynthesisConfig::WaveformType::TRIANGLE;
+            } else if (waveform_str == "square") {
+                config.waveform_type = SynthesisConfig::WaveformType::SQUARE;
+            } else if (waveform_str == "sawtooth") {
+                config.waveform_type = SynthesisConfig::WaveformType::SAWTOOTH;
+            } else {
+                config.waveform_type = SynthesisConfig::WaveformType::MIXED;
+            }
+            
             fmt::print("✅ Загружена конфигурация из synthesis.json\n");
+            fmt::print("   Waveform: {}\n", waveform_str);
+            fmt::print("   Reverb: {:.0f}%\n", config.reverb_mix * 100.0);
+            if (config.use_stereo_modulation) {
+                fmt::print("   Stereo modulation: ON (depth={:.1f}ms, rate={:.2f}Hz, mix={:.0f}%)\n",
+                           config.stereo_depth * 1000.0, config.stereo_rate, config.stereo_mix * 100.0);
+            } else {
+                fmt::print("   Stereo modulation: OFF\n");
+            }
         } else {
             fmt::print("⚠️ Файл synthesis.json не найден, используются значения по умолчанию\n");
         }
@@ -96,8 +109,7 @@ int main(int argc, char* argv[]) {
         fmt::print("   Используются значения по умолчанию\n");
     }
 
-    double impact_force = config.impact_force;
-    
+    // Определяем основную частоту
     double prime_frequency = 0.0;
     if (data.modes.size() > 1) {
         prime_frequency = data.modes[1].frequency_hz;
@@ -105,10 +117,10 @@ int main(int argc, char* argv[]) {
         prime_frequency = data.modes[0].frequency_hz;
     }
     config.target_fundamental = prime_frequency;
-    
-    config.alpha_damping = 0.0;
-    config.beta_damping = 0.0;
 
+    // ============================================================
+    // ПОДГОТОВКА МОД
+    // ============================================================
     std::vector<Mode> modes;
     std::vector<double> frequencies;
     std::vector<std::string> mode_names;
@@ -141,7 +153,7 @@ int main(int argc, char* argv[]) {
         }
         mode_names.push_back(name);
         
-        m.amplitude = std::sqrt(data.modes[i].effective_mass_norm) / max_amp * impact_force;
+        m.amplitude = std::sqrt(data.modes[i].effective_mass_norm) / max_amp * config.impact_force;
         
         if (m.frequency > 1.0) {
             m.decay_time = 2.2 / (M_PI * m.frequency * config.loss_factor);
@@ -150,15 +162,13 @@ int main(int argc, char* argv[]) {
         }
         
         double freq_ratio_attack = m.frequency / config.target_fundamental;
-        m.attack_time = 0.003 + 0.008 / std::sqrt(freq_ratio_attack);
+        m.attack_time = 0.002 + 0.005 / std::sqrt(freq_ratio_attack);
         
-        m.decay_time *= impact_force;
-        m.attack_time *= impact_force;
+        m.decay_time *= config.impact_force;
+        m.attack_time *= config.impact_force;
         
-        if (m.attack_time < 0.001) m.attack_time = 0.001;
-        if (m.attack_time > 0.04) m.attack_time = 0.04;
-        if (m.decay_time > 30.0) m.decay_time = 30.0;
-        if (m.decay_time < 0.1) m.decay_time = 0.1;
+        m.attack_time = std::clamp(m.attack_time, 0.001, 0.03);
+        m.decay_time = std::clamp(m.decay_time, 0.1, 30.0);
         
         m.phase = 0.0;
         modes.push_back(m);
@@ -171,18 +181,14 @@ int main(int argc, char* argv[]) {
 
     // Длительность
     if (config.duration > 0.0) {
-        // Используем заданную длительность
-        if (config.duration < 0.1) config.duration = 0.1;
-        if (config.duration > 30.0) config.duration = 30.0;
+        config.duration = std::clamp(config.duration, 0.1, 30.0);
     } else {
-        // Автоматическая (естественная) длительность
         double max_t60 = 0.0;
         for (const auto& mode : modes) {
             if (mode.decay_time > max_t60) max_t60 = mode.decay_time;
         }
         config.duration = max_t60 * config.tail_factor;
-        if (config.duration > 30.0) config.duration = 30.0;
-        if (config.duration < 1.0) config.duration = 3.0;
+        config.duration = std::clamp(config.duration, 1.0, 30.0);
     }
 
     GeometryParams geo;
@@ -194,19 +200,24 @@ int main(int argc, char* argv[]) {
     fmt::print("\n📋 ПАРАМЕТРЫ:\n");
     fmt::print("   Основная частота (Prime): {:.1f} Гц\n", config.target_fundamental);
     fmt::print("   Количество мод: {}\n", modes.size());
-    fmt::print("   Сила удара: {:.1f}\n", impact_force);
+    fmt::print("   Сила удара: {:.1f}\n", config.impact_force);
     fmt::print("   Коэффициент потерь: {:.2e}\n", config.loss_factor);
     fmt::print("   Длительность: {:.1f} с\n", config.duration);
-    fmt::print("   Fade in: {:.3f} с, Fade out: {:.3f} с\n", config.fade_in, config.fade_out);
+    fmt::print("   Реверберация: {:.0f}%\n", config.reverb_mix * 100.0);
+    if (config.use_stereo_modulation) {
+        fmt::print("   Стерео-модуляция: ВКЛ (глубина={:.1f}мс, частота={:.2f}Гц, уровень={:.0f}%)\n",
+                   config.stereo_depth * 1000.0, config.stereo_rate, config.stereo_mix * 100.0);
+    }
 
     fmt::print("\n🎵 СПЕКТР МОД (ТОЛЬКО ИЗ .dat):\n");
     fmt::print("   {:-<70}\n", "");
-    fmt::print("   № | Частота(Гц) | Амплитуда | T60(с) | Название\n");
+    fmt::print("   № | Частота(Гц) | Амплитуда | T60(с) | Атака(мс) | Название\n");
     fmt::print("   {:-<70}\n", "");
     for (size_t i = 0; i < modes.size() && i < 20; ++i) {
-        fmt::print("   {:2d} | {:10.2f} | {:8.6f} | {:6.2f}  | {}\n",
+        fmt::print("   {:2d} | {:10.2f} | {:8.6f} | {:6.2f}  | {:7.1f}  | {}\n",
                    i+1, modes[i].frequency, modes[i].amplitude, 
-                   modes[i].decay_time, mode_names[i]);
+                   modes[i].decay_time, modes[i].attack_time * 1000.0,
+                   mode_names[i]);
     }
     if (modes.size() > 20) {
         fmt::print("   ... и ещё {} мод\n", modes.size() - 20);
@@ -220,11 +231,6 @@ int main(int argc, char* argv[]) {
     BellSynthesizer synth(config);
     synth.generate_modes(geo, modes);
     synth.synthesize();
-    
-    // Применяем fade из конфигурации
-    synth.apply_fade(config.fade_in, config.fade_out);
-    
-    synth.normalize(config.target_peak);
     
     auto end = std::chrono::high_resolution_clock::now();
     auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
@@ -251,6 +257,11 @@ int main(int argc, char* argv[]) {
     fmt::print("   Длительность: {:.1f} с\n", synth.get_actual_duration());
     fmt::print("   CSV спектр: spectrum_{}hz.csv\n", (int)config.target_fundamental);
     fmt::print("   CSV огибающих: envelopes_all.csv\n");
+    fmt::print("   Waveform: {}\n", 
+               config.waveform_type == SynthesisConfig::WaveformType::SINE ? "SINE" :
+               config.waveform_type == SynthesisConfig::WaveformType::TRIANGLE ? "TRIANGLE" :
+               config.waveform_type == SynthesisConfig::WaveformType::SQUARE ? "SQUARE" :
+               config.waveform_type == SynthesisConfig::WaveformType::SAWTOOTH ? "SAWTOOTH" : "MIXED");
     fmt::print("{:=^70}\n\n", "");
     
     return 0;

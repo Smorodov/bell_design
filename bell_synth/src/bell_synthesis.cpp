@@ -1,5 +1,5 @@
 // =============================================================================
-// bell_synthesis.cpp - РЕАЛИЗАЦИЯ СИНТЕЗА ЗВУКА КОЛОКОЛА
+// bell_synthesis.cpp - СИНТЕЗ ЗВУКА КОЛОКОЛА
 // =============================================================================
 #include "bell_synthesis.hpp"
 #include <Eigen/Dense>
@@ -19,6 +19,21 @@
 
 namespace BellOptimizer {
 
+// =========================================================================
+// ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ
+// =========================================================================
+
+static double smoothstep(double t, double a, double b) {
+    if (t <= a) return 0.0;
+    if (t >= b) return 1.0;
+    double x = (t - a) / (b - a);
+    return x * x * (3.0 - 2.0 * x);
+}
+
+// =========================================================================
+// GEOMETRYPARAMS
+// =========================================================================
+
 double GeometryParams::get_radius_at(double height_pos) const {
     if (!has_profile || profile_radius.empty()) {
         double t = std::max(0.0, std::min(1.0, height_pos));
@@ -26,6 +41,7 @@ double GeometryParams::get_radius_at(double height_pos) const {
     }
     
     double pos = height_pos * (profile_radius.size() - 1);
+    pos = std::clamp(pos, 0.0, static_cast<double>(profile_radius.size() - 1));
     size_t idx = static_cast<size_t>(pos);
     double frac = pos - idx;
     
@@ -39,6 +55,7 @@ double GeometryParams::get_thickness_at(double height_pos) const {
     }
     
     double pos = height_pos * (profile_thickness.size() - 1);
+    pos = std::clamp(pos, 0.0, static_cast<double>(profile_thickness.size() - 1));
     size_t idx = static_cast<size_t>(pos);
     double frac = pos - idx;
     
@@ -72,6 +89,10 @@ double GeometryParams::get_max_slope() const {
     return max_slope;
 }
 
+// =========================================================================
+// КОНСТРУКТОР
+// =========================================================================
+
 BellSynthesizer::BellSynthesizer(const SynthesisConfig& config)
     : config_(config) {
     if (config_.duration > 0.0) {
@@ -79,67 +100,253 @@ BellSynthesizer::BellSynthesizer(const SynthesisConfig& config)
     }
 }
 
-void BellSynthesizer::generate_modes(const GeometryParams& geo, 
-                                     const std::vector<Mode>& base_modes) {
-    geometry_ = geo;
-    modes_.clear();
-    
-    if (!base_modes.empty()) {
-        modes_ = base_modes;
-    } else {
-        fmt::print(stderr, "Ошибка: нет мод для синтеза\n");
-        return;
+// =========================================================================
+// ВЫБОР ФОРМЫ ВОЛНЫ
+// =========================================================================
+
+PolyBLEP::Waveform BellSynthesizer::select_waveform(double frequency) const {
+    switch (config_.waveform_type) {
+        case SynthesisConfig::WaveformType::SINE:
+            return PolyBLEP::SINE;
+        case SynthesisConfig::WaveformType::TRIANGLE:
+            return PolyBLEP::TRIANGLE;
+        case SynthesisConfig::WaveformType::SQUARE:
+            return PolyBLEP::SQUARE;
+        case SynthesisConfig::WaveformType::SAWTOOTH:
+            return PolyBLEP::SAWTOOTH;
+        case SynthesisConfig::WaveformType::MIXED:
+        default:
+            if (frequency < 500.0) return PolyBLEP::TRIANGLE;
+            else if (frequency < 2000.0) return PolyBLEP::SINE;
+            else return PolyBLEP::SAWTOOTH;
     }
-    
-    fmt::print("   Мод для синтеза: {}\n", modes_.size());
 }
 
-void BellSynthesizer::generate_modes_from_params(const GeometryParams& geo) {
-    fmt::print(stderr, "Warning: generate_modes_from_params() вызван, но моды должны браться только из .dat\n");
-}
+// =========================================================================
+// РАСЧЕТ ОГИБАЮЩЕЙ
+// =========================================================================
 
 double BellSynthesizer::calculate_decay_envelope(double time, const Mode& mode) const {
-    double t60 = mode.decay_time;
-    if (t60 < 0.001) t60 = 0.001;
+    double t60 = std::max(mode.decay_time, 0.001);
+    double attack_time = std::max(mode.attack_time, 0.001);
     
-    double attack_time = mode.attack_time;
-    if (attack_time < 0.001) attack_time = 0.001;
+    // Атака
+    double attack_end = attack_time * 1.5;
+    double attack = std::min(1.0, time / attack_end);
     
-    double attack = 1.0 - std::exp(-time / attack_time);
-    
+    // Нелинейное демпфирование
     double amplitude = mode.amplitude * attack;
     double nonlinear_factor = 1.0 + config_.nonlinear_damping * amplitude * amplitude;
     double effective_t60 = t60 / nonlinear_factor;
     
-    double decay = std::exp(-3.0 * time / effective_t60);
+    double freq_ratio = std::clamp(mode.frequency / 1000.0, 0.1, 10.0);
     
-    double freq_factor = mode.frequency / 1000.0;
-    double correction = 1.0 + 0.1 * std::exp(-freq_factor);
+    // Три экспоненты с разными временами затухания
+    double tau1 = effective_t60 / (1.0 + 0.5 * freq_ratio);
+    double tau2 = effective_t60;
+    double tau3 = effective_t60 * (1.0 + 0.3 / freq_ratio);
     
-    double t_rel = time / effective_t60;
+    tau1 = std::max(tau1, 0.001);
+    if (tau1 > tau2) tau1 = tau2 * 0.5;
+    if (tau3 < tau2) tau3 = tau2 * 1.5;
+    tau3 = std::min(tau3, 30.0);
     
-    if (t_rel < 0.15) {
-        double freq_boost = 1.0 + config_.boost_freq_factor * freq_factor;
-        double boost_factor = 1.0 + config_.boost_amplitude * freq_boost * (1.0 - t_rel / 0.15);
-        decay = decay * boost_factor;
+    // Точки переключения между экспонентами
+    double t1 = effective_t60 * 0.05;
+    double t2 = effective_t60 * 0.25;
+    double t3 = effective_t60 * 0.50;
+    double t4 = effective_t60 * 0.75;
+    
+    double e1 = 0.0, e2 = 0.0, e3 = 0.0;
+    double w1 = 0.0, w2 = 0.0, w3 = 0.0;
+    
+    if (time < t1) {
+        e1 = std::exp(-3.0 * time / tau1);
+        w1 = 1.0;
+    } else if (time < t2) {
+        double alpha = smoothstep(time, t1, t2);
+        w1 = 1.0 - alpha;
+        w2 = alpha;
+        e1 = std::exp(-3.0 * time / tau1);
+        e2 = std::exp(-3.0 * time / tau2);
+    } else if (time < t3) {
+        w2 = 1.0;
+        e2 = std::exp(-3.0 * time / tau2);
+    } else if (time < t4) {
+        double alpha = smoothstep(time, t3, t4);
+        w2 = 1.0 - alpha;
+        w3 = alpha;
+        e2 = std::exp(-3.0 * time / tau2);
+        double e2_at_t3 = std::exp(-3.0 * t3 / tau2);
+        e3 = e2_at_t3 * std::exp(-3.0 * (time - t3) / tau3);
+    } else {
+        w3 = 1.0;
+        double e2_at_t3 = std::exp(-3.0 * t3 / tau2);
+        e3 = e2_at_t3 * std::exp(-3.0 * (time - t3) / tau3);
     }
     
-    if (t_rel > 0.7) {
-        double slowdown = 1.0 + config_.slowdown_factor * ((t_rel - 0.7) / 0.3);
-        decay = std::pow(decay, 1.0 / (slowdown * correction));
-    }
+    double envelope = w1 * e1 + w2 * e2 + w3 * e3;
+    envelope *= attack;
     
-    double envelope = decay * attack;
-    
+    if (envelope < 0.0) envelope = 0.0;
     if (envelope < 1e-12) envelope = 0.0;
     
     return envelope;
 }
 
+// =========================================================================
+// ГЕНЕРАЦИЯ МОДЫ С POLYBLEP
+// =========================================================================
+
+void BellSynthesizer::add_mode_with_polyblep(const Mode& mode, const EnvelopeData& envelope_data,
+                                             std::vector<double>& buffer) {
+    if (envelope_data.envelope.empty()) return;
+    
+    double dt = 1.0 / (config_.sample_rate * config_.oversample_factor);
+    size_t max_samples = std::min(buffer.size(), 
+                                  static_cast<size_t>(envelope_data.duration / dt));
+    
+    PolyBLEP osc(config_.sample_rate * config_.oversample_factor);
+    osc.setFrequency(mode.frequency);
+    osc.setWaveform(select_waveform(mode.frequency));
+    osc.setAmplitude(1.0);
+    
+    double phase_norm = mode.phase / (2.0 * M_PI);
+    phase_norm = phase_norm - std::floor(phase_norm);
+    osc.sync(phase_norm);
+    
+    for (size_t i = 0; i < max_samples; ++i) {
+        double t = i * dt;
+        double envelope = get_envelope_value(envelope_data, t);
+        double sample = osc.getAndInc();
+        buffer[i] += mode.amplitude * envelope * sample;
+    }
+}
+
+// =========================================================================
+// ГЕНЕРАЦИЯ МОД
+// =========================================================================
+
+void BellSynthesizer::generate_modes(const GeometryParams& geo, 
+                                     const std::vector<Mode>& base_modes) {
+    geometry_ = geo;
+    modes_ = base_modes;
+    printf("   Modes for synthesis: %zu\n", modes_.size());
+}
+
+// =========================================================================
+// РАСЧЕТ ЕСТЕСТВЕННОЙ ДЛИТЕЛЬНОСТИ
+// =========================================================================
+
+double BellSynthesizer::calculate_natural_duration() const {
+    double max_t60 = 0.0;
+    for (const auto& mode : modes_) {
+        if (mode.decay_time > max_t60) max_t60 = mode.decay_time;
+    }
+    
+    max_t60 = std::max(max_t60, 0.001);
+    double natural_duration = std::clamp(max_t60 * config_.tail_factor, 0.5, 30.0);
+    
+    return natural_duration;
+}
+
+// =========================================================================
+// ПРЕДВАРИТЕЛЬНЫЙ РАСЧЕТ ОГИБАЮЩИХ (С ИНДИВИДУАЛЬНОЙ ДЛИТЕЛЬНОСТЬЮ)
+// =========================================================================
+
+void BellSynthesizer::precompute_envelopes(double global_duration) {
+    envelope_cache_.clear();
+    
+    double table_step = std::max(config_.envelope_table_step, 0.0001);
+    
+    for (size_t m = 0; m < modes_.size(); ++m) {
+        // Индивидуальная длительность для каждой моды
+        double mode_duration = modes_[m].decay_time * 3.0;
+        mode_duration = std::clamp(mode_duration, 0.5, global_duration);
+        
+        size_t table_size = std::max(static_cast<size_t>(mode_duration / table_step) + 1, size_t(10));
+        
+        EnvelopeData data;
+        data.step = table_step;
+        data.duration = mode_duration;
+        data.envelope.resize(table_size);
+        
+        for (size_t i = 0; i < table_size; ++i) {
+            double t = i * table_step;
+            if (t > mode_duration) t = mode_duration;
+            data.envelope[i] = calculate_decay_envelope(t, modes_[m]);
+        }
+        
+        // Плавное затухание к нулю на последних 10%
+        size_t fade_start = static_cast<size_t>(table_size * 0.9);
+        if (fade_start < table_size) {
+            for (size_t i = fade_start; i < table_size; ++i) {
+                double t = static_cast<double>(i - fade_start) / (table_size - fade_start);
+                double fade = 1.0 - t * t * (3.0 - 2.0 * t);
+                data.envelope[i] *= fade;
+            }
+        }
+        
+        envelope_cache_[m] = std::move(data);
+    }
+    
+    printf("   Envelopes computed: %zu modes\n", modes_.size());
+}
+
+// =========================================================================
+// РАСЧЕТ ФАКТИЧЕСКОЙ ДЛИТЕЛЬНОСТИ ПО СУММАРНОЙ ОГИБАЮЩЕЙ
+// =========================================================================
+
+double BellSynthesizer::calculate_actual_duration_from_envelopes(double threshold) {
+    if (envelope_cache_.empty()) return 0.5;
+    
+    // Находим максимальную длительность среди всех огибающих
+    double max_duration = 0.0;
+    for (const auto& pair : envelope_cache_) {
+        if (pair.second.duration > max_duration) {
+            max_duration = pair.second.duration;
+        }
+    }
+    
+    if (max_duration < 0.01) return 0.5;
+    
+    // Шаг для сканирования (1 мс)
+    double step = 0.001;
+    size_t steps = static_cast<size_t>(max_duration / step) + 1;
+    
+    // Идём с конца и ищем момент, когда суммарная огибающая > порога
+    for (size_t i = steps; i > 0; --i) {
+        double time = i * step;
+        if (time > max_duration) continue;
+        
+        double sum_envelope = 0.0;
+        for (const auto& pair : envelope_cache_) {
+            sum_envelope += get_envelope_value(pair.second, time);
+        }
+        
+        // Если суммарная огибающая всё ещё выше порога
+        if (sum_envelope > threshold) {
+            // Добавляем небольшой запас (0.1 секунды)
+            double result = time + 0.1;
+            return std::min(result, max_duration);
+        }
+    }
+    
+    return max_duration;
+}
+
+// =========================================================================
+// ПОЛУЧЕНИЕ ЗНАЧЕНИЯ ОГИБАЮЩЕЙ
+// =========================================================================
+
 double BellSynthesizer::get_envelope_value(const EnvelopeData& data, double time) const {
     if (data.envelope.empty()) return 0.0;
     if (time < 0.0) return data.envelope[0];
-    if (time >= data.duration) return 0.0;
+    
+    // Выход за пределы длительности - возвращаем 0
+    if (time >= data.duration) {
+        return 0.0;
+    }
     
     double idx_double = time / data.step;
     size_t idx = static_cast<size_t>(idx_double);
@@ -150,210 +357,11 @@ double BellSynthesizer::get_envelope_value(const EnvelopeData& data, double time
     return data.envelope[idx] * (1.0 - frac) + data.envelope[idx + 1] * frac;
 }
 
-std::vector<double> BellSynthesizer::scale_envelope_to_duration(
-    const std::vector<double>& original_envelope,
-    double original_duration,
-    double target_duration,
-    const Mode& mode) {
-    
-    if (original_envelope.empty()) return original_envelope;
-    if (target_duration <= 0.0) return original_envelope;
-    
-    if (std::abs(original_duration - target_duration) < 1e-6) {
-        return original_envelope;
-    }
-    
-    // Находим естественную длительность (где огибающая падает ниже порога)
-    double peak = mode.amplitude;
-    double noise_floor = 1e-8;
-    double relative_threshold = config_.envelope_threshold;
-    double threshold = std::max(noise_floor, peak * relative_threshold);
-    if (threshold < 1e-6) threshold = 1e-6;
-    
-    bool was_above_threshold = false;
-    size_t natural_end = original_envelope.size();
-    
-    for (size_t i = 0; i < original_envelope.size(); ++i) {
-        if (original_envelope[i] > threshold) {
-            was_above_threshold = true;
-        }
-        if (was_above_threshold && original_envelope[i] < threshold) {
-            natural_end = i;
-            break;
-        }
-    }
-    
-    if (natural_end == original_envelope.size()) {
-        natural_end = (size_t)(original_envelope.size() * 0.99);
-    }
-    if (natural_end < original_envelope.size() * 0.1) {
-        natural_end = (size_t)(original_envelope.size() * 0.1);
-    }
-    
-    // Масштабируем только активную часть (0 ... natural_end)
-    double original_active_duration = (double)natural_end / (original_envelope.size() - 1) * original_duration;
-    double scale = target_duration / original_active_duration;
-    
-    if (original_active_duration < 1e-12) {
-        return original_envelope;
-    }
-    
-    std::vector<double> scaled_envelope;
-    scaled_envelope.resize(original_envelope.size());
-    
-    for (size_t i = 0; i < original_envelope.size(); ++i) {
-        double t_norm = (double)i / (original_envelope.size() - 1);
-        double t_scaled = t_norm / scale;
-        
-        if (t_scaled >= 1.0) {
-            scaled_envelope[i] = 0.0;  // Хвост обнуляем
-        } else {
-            double pos = t_scaled * (original_envelope.size() - 1);
-            size_t idx = (size_t)pos;
-            double frac = pos - idx;
-            
-            if (idx >= original_envelope.size() - 1) {
-                scaled_envelope[i] = 0.0;
-            } else {
-                scaled_envelope[i] = original_envelope[idx] * (1.0 - frac) + 
-                                     original_envelope[idx + 1] * frac;
-            }
-        }
-    }
-    
-    // Энергетическая компенсация НЕ ПРИМЕНЯЕТСЯ
-    // Нормализация на выходе выровняет громкость всех файлов
-    
-    return scaled_envelope;
-}
+// =========================================================================
+// ДАУНСЭМПЛИНГ
+// =========================================================================
 
-void BellSynthesizer::precompute_envelopes() {
-    envelope_cache_.clear();
-    
-    bool use_natural_duration = (config_.duration < 0.0);
-    
-    double max_t60 = 0.0;
-    for (const auto& mode : modes_) {
-        if (mode.decay_time > max_t60) max_t60 = mode.decay_time;
-    }
-    
-    double natural_duration = max_t60 * config_.tail_factor;
-    if (natural_duration > 30.0) natural_duration = 30.0;
-    if (natural_duration < 1.0) natural_duration = 3.0;
-    
-    if (use_natural_duration || config_.duration <= 0.0) {
-        actual_duration_ = natural_duration;
-    } else {
-        actual_duration_ = config_.duration;
-        if (actual_duration_ < 0.1) actual_duration_ = 0.1;
-        if (actual_duration_ > 30.0) actual_duration_ = 30.0;
-    }
-    
-    double table_step = config_.envelope_table_step;
-    if (table_step < 0.0001) table_step = 0.0001;
-    
-    bool need_scaling = !use_natural_duration && 
-                        std::abs(natural_duration - actual_duration_) > 1e-6;
-    
-    fmt::print("   Расчёт огибающих (шаг {:.1f} мс)...\n", table_step * 1000.0);
-    if (need_scaling) {
-        fmt::print("   Естественная длительность: {:.2f} с\n", natural_duration);
-        fmt::print("   Целевая длительность: {:.2f} с (масштабирование)\n", actual_duration_);
-    }
-    
-    for (size_t m = 0; m < modes_.size(); ++m) {
-        EnvelopeData data;
-        data.step = table_step;
-        data.duration = actual_duration_;
-        
-        if (need_scaling) {
-            size_t natural_size = static_cast<size_t>(natural_duration / table_step) + 1;
-            if (natural_size < 10) natural_size = 10;
-            
-            std::vector<double> natural_envelope(natural_size);
-            for (size_t i = 0; i < natural_size; ++i) {
-                double t = i * table_step;
-                natural_envelope[i] = calculate_decay_envelope(t, modes_[m]);
-            }
-            
-            data.envelope = scale_envelope_to_duration(
-                natural_envelope, natural_duration, actual_duration_, modes_[m]);
-        } else {
-            size_t table_size = static_cast<size_t>(actual_duration_ / table_step) + 1;
-            if (table_size < 10) table_size = 10;
-            data.envelope.resize(table_size);
-            for (size_t i = 0; i < table_size; ++i) {
-                double t = i * table_step;
-                data.envelope[i] = calculate_decay_envelope(t, modes_[m]);
-            }
-        }
-        
-        envelope_cache_[m] = std::move(data);
-    }
-    
-    fmt::print("   Огибающие рассчитаны: {} мод\n", modes_.size());
-    fmt::print("   Длительность: {:.2f} с", actual_duration_);
-    if (use_natural_duration) {
-        fmt::print(" (естественная)");
-    } else if (need_scaling) {
-        fmt::print(" (масштабирована из {:.2f} с)", natural_duration);
-    } else {
-        fmt::print(" (фиксированная)");
-    }
-    fmt::print("\n");
-}
-
-void BellSynthesizer::add_mode_to_audio(const Mode& mode, 
-                                        const EnvelopeData& envelope_data,
-                                        std::vector<double>& buffer) {
-    if (envelope_data.envelope.empty()) return;
-    
-    double dt = 1.0 / (config_.sample_rate * config_.oversample_factor);
-    size_t max_samples = std::min(buffer.size(), 
-                                  static_cast<size_t>(envelope_data.duration / dt));
-    double amp = mode.amplitude;
-    double freq = mode.frequency;
-    
-    double nyquist = 0.5 / dt;
-    if (freq >= nyquist) {
-        fmt::print(stderr, "Warning: частота {:.1f} Гц превышает Найквиста ({:.1f} Гц), пропускаем моду\n", 
-                   freq, nyquist);
-        return;
-    }
-    
-    for (size_t i = 0; i < max_samples; ++i) {
-        double t = i * dt;
-        double envelope = get_envelope_value(envelope_data, t);
-        double oscillation = std::sin(2.0 * M_PI * mode.frequency * t + mode.phase);
-        buffer[i] += amp * envelope * oscillation;
-    }
-}
-
-void BellSynthesizer::synthesize() {
-    if (modes_.empty()) {
-        fmt::print(stderr, "Ошибка: нет мод для синтеза\n");
-        return;
-    }
-    
-    precompute_envelopes();
-    
-    size_t total_samples_os = static_cast<size_t>(actual_duration_ * 
-                                                   config_.sample_rate * 
-                                                   config_.oversample_factor);
-    if (total_samples_os < 1) total_samples_os = 1;
-    
-    audio_oversampled_.assign(total_samples_os, 0.0);
-    
-    fmt::print("   Синтез звука ({:.2f} с, {} Гц, x{} oversample)...\n", 
-               actual_duration_, config_.sample_rate, config_.oversample_factor);
-    
-    for (size_t m = 0; m < modes_.size(); ++m) {
-        auto it = envelope_cache_.find(m);
-        if (it != envelope_cache_.end()) {
-            add_mode_to_audio(modes_[m], it->second, audio_oversampled_);
-        }
-    }
-    
+void BellSynthesizer::downsample_audio() {
     size_t total_samples = static_cast<size_t>(actual_duration_ * config_.sample_rate);
     if (total_samples < 1) total_samples = 1;
     
@@ -362,130 +370,66 @@ void BellSynthesizer::synthesize() {
     for (size_t i = 0; i < total_samples; ++i) {
         double sum = 0.0;
         size_t start = i * config_.oversample_factor;
-        size_t end = std::min(start + config_.oversample_factor, total_samples_os);
+        size_t end = std::min(start + config_.oversample_factor, audio_oversampled_.size());
         
         for (size_t j = start; j < end; ++j) {
             sum += audio_oversampled_[j];
         }
         audio_[i] = sum / (end - start);
     }
-    
-    if (config_.use_acoustic_model) {
-        apply_acoustic_coupling();
-        if (config_.use_helmholtz_resonance) {
-            apply_helmholtz_resonance();
-        }
-        apply_radiation_filter();
-    }
-    
-    if (config_.use_mount_model) {
-        apply_mount_filter();
-    }
-    
-    fmt::print("   Синтез завершён\n");
 }
 
-void BellSynthesizer::apply_acoustic_coupling() {
-    if (!config_.use_acoustic_coupling) return;
-    
-    size_t total_samples = audio_.size();
-    double dt = 1.0 / config_.sample_rate;
-    
-    for (const auto& mode : modes_) {
-        if (mode.frequency > config_.max_frequency) continue;
-        
-        double amp = mode.amplitude * 0.05;
-        double freq = mode.frequency;
-        double damping = 0.01;
-        
-        for (size_t i = 0; i < total_samples; ++i) {
-            double t = i * dt;
-            double envelope = std::exp(-damping * t);
-            double osc = std::sin(2.0 * M_PI * freq * t + mode.phase);
-            audio_[i] += amp * envelope * osc;
-        }
-    }
-}
-
-void BellSynthesizer::apply_helmholtz_resonance() {
-    if (!config_.use_helmholtz_resonance) return;
-    
-    size_t total_samples = audio_.size();
-    double dt = 1.0 / config_.sample_rate;
-    
-    double V = M_PI * geometry_.r_max * geometry_.r_max * geometry_.height;
-    double A = M_PI * geometry_.r_max * geometry_.r_max;
-    double L = geometry_.height * 0.1;
-    double c = 343.0;
-    
-    double f_h = (c / (2.0 * M_PI)) * std::sqrt(A / (V * L));
-    f_h = std::max(f_h, 50.0);
-    f_h = std::min(f_h, 500.0);
-    
-    double amp = config_.helmholtz_amplitude;
-    double damping = config_.helmholtz_damping;
-    
-    for (size_t i = 0; i < total_samples; ++i) {
-        double t = i * dt;
-        double envelope = std::exp(-damping * t);
-        double osc = std::sin(2.0 * M_PI * f_h * t);
-        audio_[i] += amp * envelope * osc;
-    }
-}
-
-void BellSynthesizer::apply_radiation_filter() {
-    if (!config_.use_acoustic_model) return;
-    
-    double efficiency = config_.radiation_efficiency;
-    double damping = config_.radiation_damping_factor;
-    
-    size_t total_samples = audio_.size();
-    double dt = 1.0 / config_.sample_rate;
-    
-    for (size_t i = 0; i < total_samples; ++i) {
-        double t = i * dt;
-        double filter = 1.0 + efficiency * std::exp(-damping * t);
-        audio_[i] *= filter;
-    }
-}
-
-void BellSynthesizer::apply_mount_filter() {
-    if (!config_.use_mount_model) return;
-    
-    size_t total_samples = audio_.size();
-    double dt = 1.0 / config_.sample_rate;
-    double damping = config_.mount_damping;
-    
-    double fc = config_.target_fundamental * 0.5;
-    double alpha = 1.0 / (1.0 + 2.0 * M_PI * fc * dt);
-    
-    double prev = 0.0;
-    for (size_t i = 0; i < total_samples; ++i) {
-        double sample = audio_[i];
-        double filtered = alpha * sample + (1.0 - alpha) * prev;
-        audio_[i] = filtered * (1.0 - damping * (1.0 - filtered / (sample + 1e-10)));
-        prev = filtered;
-    }
-}
+// =========================================================================
+// ЭФФЕКТ: РЕВЕРБЕРАЦИЯ
+// =========================================================================
 
 void BellSynthesizer::add_reverb() {
     if (config_.reverb_mix < 0.001) return;
     
     size_t total_samples = audio_.size();
+    double dt = 1.0 / config_.sample_rate;
     
-    int delay_samples = static_cast<int>(config_.reverb_delay * config_.sample_rate);
-    double feedback = config_.reverb_feedback;
-    double mix = config_.reverb_mix;
+    double max_t60 = 0.0;
+    for (const auto& mode : modes_) {
+        if (mode.decay_time > max_t60) max_t60 = mode.decay_time;
+    }
+    max_t60 = std::max(max_t60, 0.5);
     
-    if (delay_samples >= static_cast<int>(total_samples)) {
-        delay_samples = static_cast<int>(total_samples * 0.05);
+    double reverb_rt60 = max_t60 * 0.6;
+    double decay_per_sample = std::exp(-3.0 * dt / reverb_rt60);
+    
+    const int NUM_LINES = 3;
+    std::vector<int> delays = {
+        static_cast<int>(0.02 * config_.sample_rate),
+        static_cast<int>(0.035 * config_.sample_rate),
+        static_cast<int>(0.055 * config_.sample_rate)
+    };
+    
+    std::vector<std::vector<double>> delay_lines(NUM_LINES);
+    std::vector<size_t> positions(NUM_LINES, 0);
+    
+    for (int i = 0; i < NUM_LINES; ++i) {
+        delay_lines[i].assign(delays[i] + 1, 0.0);
     }
     
     std::vector<double> reverb(total_samples, 0.0);
+    double mix = std::clamp(config_.reverb_mix, 0.0, 0.5);
+    double feedback = std::clamp(config_.reverb_feedback, 0.0, 0.9);
     
-    for (size_t i = delay_samples; i < total_samples; ++i) {
-        reverb[i] = audio_[i - delay_samples] * 0.7 + 
-                    reverb[i - delay_samples] * feedback * 0.3;
+    for (size_t i = 0; i < total_samples; ++i) {
+        double wet = 0.0;
+        double input = audio_[i] * 0.5;
+        
+        for (int ch = 0; ch < NUM_LINES; ++ch) {
+            size_t pos = positions[ch];
+            double delayed = delay_lines[ch][pos];
+            double output = delayed * decay_per_sample;
+            wet += output * 0.33;
+            delay_lines[ch][pos] = input + output * feedback * 0.7;
+            positions[ch] = (pos + 1) % delay_lines[ch].size();
+        }
+        
+        reverb[i] = wet;
     }
     
     for (size_t i = 0; i < total_samples; ++i) {
@@ -493,11 +437,65 @@ void BellSynthesizer::add_reverb() {
     }
 }
 
+// =========================================================================
+// ЭФФЕКТ: СТЕРЕО-МОДУЛЯЦИЯ (ДЛЯ ОБЪЁМА)
+// =========================================================================
+
+void BellSynthesizer::apply_stereo_modulation(double depth, double rate, double mix) {
+    if (audio_.empty()) return;
+    if (depth < 0.0001) return;
+    
+    size_t total_samples = audio_.size();
+    double dt = 1.0 / config_.sample_rate;
+    
+    int max_delay = static_cast<int>(depth * config_.sample_rate * 2.0 + 1);
+    if (max_delay < 2) max_delay = 2;
+    
+    std::vector<double> delay_buffer(max_delay, 0.0);
+    size_t write_pos = 0;
+    double phase = 0.0;
+    
+    double rate_rad = 2.0 * M_PI * rate / config_.sample_rate;
+    double mix_val = std::clamp(mix, 0.0, 0.5);
+    
+    std::vector<double> wet_signal(total_samples, 0.0);
+    
+    for (size_t i = 0; i < total_samples; ++i) {
+        phase += rate_rad;
+        if (phase > 2.0 * M_PI) phase -= 2.0 * M_PI;
+        
+        double lfo = (std::sin(phase) + 1.0) * 0.5;
+        double delay_frames = 0.5 + lfo * max_delay * 0.8;
+        
+        double read_pos = static_cast<double>(write_pos) - delay_frames;
+        if (read_pos < 0.0) read_pos += max_delay;
+        
+        size_t idx1 = static_cast<size_t>(read_pos);
+        size_t idx2 = (idx1 + 1) % max_delay;
+        double frac = read_pos - static_cast<double>(idx1);
+        
+        double delayed = delay_buffer[idx1] + frac * (delay_buffer[idx2] - delay_buffer[idx1]);
+        wet_signal[i] = delayed;
+        
+        delay_buffer[write_pos] = audio_[i] + delayed * 0.2;
+        write_pos = (write_pos + 1) % max_delay;
+    }
+    
+    for (size_t i = 0; i < total_samples; ++i) {
+        audio_[i] = audio_[i] * (1.0 - mix_val) + wet_signal[i] * mix_val;
+    }
+}
+
+// =========================================================================
+// ЭФФЕКТ: FADE
+// =========================================================================
+
 void BellSynthesizer::apply_fade(double fade_in_time, double fade_out_time) {
     size_t total_samples = audio_.size();
     
     size_t fade_in_samples = static_cast<size_t>(fade_in_time * config_.sample_rate);
     size_t fade_out_samples = static_cast<size_t>(fade_out_time * config_.sample_rate);
+    fade_out_samples = std::min(fade_out_samples, total_samples / 4);
     
     for (size_t i = 0; i < fade_in_samples && i < total_samples; ++i) {
         double t = static_cast<double>(i) / fade_in_samples;
@@ -512,6 +510,10 @@ void BellSynthesizer::apply_fade(double fade_in_time, double fade_out_time) {
         audio_[idx] *= fade;
     }
 }
+
+// =========================================================================
+// НОРМАЛИЗАЦИЯ
+// =========================================================================
 
 void BellSynthesizer::normalize(double peak_level) {
     if (audio_.empty()) return;
@@ -530,7 +532,6 @@ void BellSynthesizer::normalize(double peak_level) {
     if (peak_amplitude_ < 1e-10) return;
     
     double gain = peak_level / peak_amplitude_;
-    
     if (config_.use_rms_normalization && rms_amplitude_ > 1e-10) {
         double rms_gain = config_.target_rms / rms_amplitude_;
         gain = std::min(gain, rms_gain * 1.2);
@@ -541,15 +542,296 @@ void BellSynthesizer::normalize(double peak_level) {
     }
 }
 
+// =========================================================================
+// ОБРЕЗКА ТИШИНЫ
+// =========================================================================
+
+void BellSynthesizer::trim_silence(double threshold) {
+    if (audio_.empty()) return;
+    if (!config_.use_tail_trimming) return;
+    
+    // Проверяем начало
+    size_t start_sample = 0;
+    for (size_t i = 0; i < audio_.size(); ++i) {
+        if (std::abs(audio_[i]) > threshold) {
+            start_sample = i;
+            break;
+        }
+    }
+    
+    if (start_sample == 0) {
+        double max_amp = 0.0;
+        for (size_t i = 0; i < std::min(size_t(1000), audio_.size()); ++i) {
+            max_amp = std::max(max_amp, std::abs(audio_[i]));
+        }
+        if (max_amp < threshold) {
+            printf("   Skipping trim: entire signal is quiet (max_amp=%.6f < threshold=%.6f)\n", 
+                   max_amp, threshold);
+            return;
+        }
+        start_sample = 0;
+    }
+    
+    if (start_sample > 0) {
+        size_t new_start = start_sample - 1;
+        if (new_start > 0) {
+            std::copy(audio_.begin() + new_start, audio_.end(), audio_.begin());
+            audio_.resize(audio_.size() - new_start);
+            printf("   Trimmed silence at start: %zu samples\n", new_start);
+        }
+    }
+    
+    // Проверяем конец
+    bool has_silence_at_end = true;
+    size_t check_samples = std::min(size_t(1000), audio_.size());
+    for (size_t i = audio_.size() - check_samples; i < audio_.size(); ++i) {
+        if (std::abs(audio_[i]) > threshold) {
+            has_silence_at_end = false;
+            break;
+        }
+    }
+    
+    if (!has_silence_at_end) {
+        printf("   No silence at end, skipping tail trim\n");
+        return;
+    }
+    
+    // Ищем 50 мс тишины
+    double silence_duration = 0.05;
+    size_t silence_samples = static_cast<size_t>(silence_duration * config_.sample_rate);
+    size_t min_silence_samples = std::max(silence_samples, size_t(10));
+    
+    size_t silence_start = 0;
+    size_t silence_count = 0;
+    bool found = false;
+    
+    for (size_t i = audio_.size(); i > 0; --i) {
+        size_t idx = i - 1;
+        if (std::abs(audio_[idx]) < threshold) {
+            silence_count++;
+            if (silence_count >= min_silence_samples) {
+                silence_start = idx;
+                found = true;
+                break;
+            }
+        } else {
+            silence_count = 0;
+        }
+    }
+    
+    if (!found) {
+        printf("   No silence > %.0f ms found, skipping trim\n", silence_duration * 1000.0);
+        return;
+    }
+    
+    size_t new_size = silence_start + 1;
+    size_t min_size = static_cast<size_t>(0.5 * config_.sample_rate);
+    if (new_size < min_size) {
+        printf("   Skip trim: would leave only %zu samples (< 0.5s)\n", new_size);
+        return;
+    }
+    
+    size_t padding = static_cast<size_t>(0.01 * config_.sample_rate);
+    if (new_size > padding) {
+        new_size -= padding;
+    }
+    
+    if (new_size < audio_.size() && new_size > 100) {
+        double old_duration = static_cast<double>(audio_.size()) / config_.sample_rate;
+        double new_duration = static_cast<double>(new_size) / config_.sample_rate;
+        
+        printf("   Trimming tail: %.2f s -> %.2f s (silence > %.0f ms, threshold=%.6f)\n",
+               old_duration, new_duration, silence_duration * 1000.0, threshold);
+        
+        size_t fade_samples = static_cast<size_t>(0.02 * config_.sample_rate);
+        fade_samples = std::min(fade_samples, new_size / 4);
+        
+        if (fade_samples > 0) {
+            for (size_t i = 0; i < fade_samples && i < new_size; ++i) {
+                double t = static_cast<double>(i) / fade_samples;
+                double fade = 0.5 * (1.0 + std::cos(M_PI * (1.0 - t)));
+                size_t idx = new_size - 1 - i;
+                audio_[idx] *= fade;
+            }
+        }
+        
+        audio_.resize(new_size);
+    }
+}
+
+// =========================================================================
+// ОСНОВНОЙ СИНТЕЗ
+// =========================================================================
+
+void BellSynthesizer::synthesize() {
+    if (modes_.empty()) {
+        fmt::print(stderr, "Error: no modes for synthesis\n");
+        return;
+    }
+    
+    double natural_duration = calculate_natural_duration();
+    printf("\n=== DURATION CALC ===\n");
+    printf("   Natural (by T60): %.2f s\n", natural_duration);
+    
+    double requested_duration = (config_.duration <= 0.0) ? natural_duration : config_.duration;
+    double global_duration = std::clamp(requested_duration, 0.5, 30.0);
+    printf("   Initial duration: %.2f s\n", global_duration);
+    
+    // ============================================================
+    // 1. РАССЧИТЫВАЕМ ВСЕ ОГИБАЮЩИЕ
+    // ============================================================
+    
+    precompute_envelopes(global_duration);
+    
+    // ============================================================
+    // 2. ОПРЕДЕЛЯЕМ ФАКТИЧЕСКУЮ ДЛИТЕЛЬНОСТЬ ПО СУММАРНОЙ ОГИБАЮЩЕЙ
+    // ============================================================
+    
+    double threshold = config_.envelope_threshold;
+    if (threshold < 1e-6) threshold = 0.001;
+    
+    actual_duration_ = calculate_actual_duration_from_envelopes(threshold);
+    
+    // Не даём длительности стать слишком маленькой
+    actual_duration_ = std::max(actual_duration_, 0.5);
+    actual_duration_ = std::min(actual_duration_, global_duration);
+    
+    printf("   Actual duration (by envelope sum): %.2f s\n", actual_duration_);
+    printf("   Threshold: %.6f\n", threshold);
+    
+    // ============================================================
+    // 3. ОБРЕЗАЕМ ОГИБАЮЩИЕ ПО ФАКТИЧЕСКОЙ ДЛИТЕЛЬНОСТИ
+    // ============================================================
+    
+    for (auto& pair : envelope_cache_) {
+        EnvelopeData& data = pair.second;
+        if (data.duration > actual_duration_) {
+            data.duration = actual_duration_;
+            size_t new_size = static_cast<size_t>(actual_duration_ / data.step) + 1;
+            if (new_size < data.envelope.size()) {
+                data.envelope.resize(new_size);
+            }
+        }
+    }
+    
+    // ============================================================
+    // 4. ГЕНЕРАЦИЯ СИГНАЛА
+    // ============================================================
+    
+    size_t total_samples_os = static_cast<size_t>(actual_duration_ * 
+                                                   config_.sample_rate * 
+                                                   config_.oversample_factor);
+    if (total_samples_os < 1) total_samples_os = 1;
+    
+    audio_oversampled_.assign(total_samples_os, 0.0);
+    
+    printf("\n   Synthesizing signal (PolyBLEP, %zu modes)...\n", modes_.size());
+    
+    for (size_t m = 0; m < modes_.size(); ++m) {
+        auto it = envelope_cache_.find(m);
+        if (it != envelope_cache_.end()) {
+            add_mode_with_polyblep(modes_[m], it->second, audio_oversampled_);
+        }
+    }
+    
+    // Диагностика: проверяем audio_oversampled_
+    double max_os = 0.0;
+    size_t check_os = std::min(size_t(1000), audio_oversampled_.size());
+    for (size_t i = 0; i < check_os; ++i) {
+        max_os = std::max(max_os, std::abs(audio_oversampled_[i]));
+    }
+    printf("   audio_oversampled_ size = %zu, max amp (first 1000) = %.6f\n", 
+           audio_oversampled_.size(), max_os);
+    
+    downsample_audio();
+    
+    // Диагностика: проверяем audio_ после даунсэмплинга
+    double max_audio = 0.0;
+    size_t check_audio = std::min(size_t(1000), audio_.size());
+    for (size_t i = 0; i < check_audio; ++i) {
+        max_audio = std::max(max_audio, std::abs(audio_[i]));
+    }
+    printf("   audio_ size = %zu, max amp (first 1000) = %.6f\n", 
+           audio_.size(), max_audio);
+    
+    double signal_duration = static_cast<double>(audio_.size()) / static_cast<double>(config_.sample_rate);
+    printf("   Signal: %zu samples, %.2f s\n", audio_.size(), signal_duration);
+    
+    // ============================================================
+    // ПРИМЕНЕНИЕ ЭФФЕКТОВ
+    // ============================================================
+    
+    printf("\n   Applying effects...\n");
+    
+    if (config_.reverb_mix > 0.001) {
+        printf("     - Reverb (mix=%.2f)\n", config_.reverb_mix);
+        add_reverb();
+    }
+    
+    if (config_.use_stereo_modulation) {
+        printf("     - Stereo modulation (depth=%.1fms, rate=%.2fHz, mix=%.0f%%)\n",
+               config_.stereo_depth * 1000.0, config_.stereo_rate, config_.stereo_mix * 100.0);
+        apply_stereo_modulation(config_.stereo_depth, config_.stereo_rate, config_.stereo_mix);
+    }
+    
+    // Диагностика: после эффектов
+    double max_effects = 0.0;
+    size_t check_effects = std::min(size_t(1000), audio_.size());
+    for (size_t i = 0; i < check_effects; ++i) {
+        max_effects = std::max(max_effects, std::abs(audio_[i]));
+    }
+    printf("   audio_ after effects size = %zu, max amp = %.6f\n", 
+           audio_.size(), max_effects);
+    
+    // ============================================================
+    // FADE И ОБРЕЗКА
+    // ============================================================
+    
+    apply_fade(config_.fade_in, config_.fade_out);
+    
+    // Диагностика: после fade
+    double max_fade = 0.0;
+    size_t check_fade = std::min(size_t(1000), audio_.size());
+    for (size_t i = 0; i < check_fade; ++i) {
+        max_fade = std::max(max_fade, std::abs(audio_[i]));
+    }
+    printf("   audio_ after fade size = %zu, max amp = %.6f\n", 
+           audio_.size(), max_fade);
+    
+    if (config_.envelope_threshold > 0.0 && config_.use_tail_trimming) {
+        printf("   Trimming silence (threshold=%.6f)...\n", config_.envelope_threshold);
+        trim_silence(config_.envelope_threshold);
+    }
+    
+    // Диагностика: после обрезки
+    double max_trim = 0.0;
+    size_t check_trim = std::min(size_t(1000), audio_.size());
+    for (size_t i = 0; i < check_trim; ++i) {
+        max_trim = std::max(max_trim, std::abs(audio_[i]));
+    }
+    printf("   audio_ after trim size = %zu, max amp = %.6f\n", 
+           audio_.size(), max_trim);
+    
+    normalize(config_.target_peak);
+    
+    double final_duration = static_cast<double>(audio_.size()) / static_cast<double>(config_.sample_rate);
+    printf("\n✅ Synthesis complete\n");
+    printf("   Final duration: %.2f s\n", final_duration);
+}
+
+// =========================================================================
+// СОХРАНЕНИЕ WAV
+// =========================================================================
+
 bool BellSynthesizer::save_wav(const std::string& filename) {
     if (audio_.empty()) {
-        fmt::print(stderr, "Ошибка: нет аудио для сохранения\n");
+        fmt::print(stderr, "Error: no audio to save\n");
         return false;
     }
     
     std::ofstream file(filename, std::ios::binary);
     if (!file) {
-        fmt::print(stderr, "Ошибка: не удалось создать файл {}\n", filename);
+        fmt::print(stderr, "Error: failed to create file {}\n", filename);
         return false;
     }
     
@@ -560,21 +842,18 @@ bool BellSynthesizer::save_wav(const std::string& filename) {
     }
     
     int data_size = static_cast<int>(pcm_audio.size() * sizeof(int16_t));
-    
     write_wav_header(file, data_size);
-    
     file.write(reinterpret_cast<const char*>(pcm_audio.data()), data_size);
     
     if (!file.good()) {
-        fmt::print(stderr, "Ошибка: запись в файл не удалась\n");
+        fmt::print(stderr, "Error: write failed\n");
         file.close();
         return false;
     }
     
     file.close();
-    
-    fmt::print("   Сохранён: {}\n", filename);
-    fmt::print("   Размер: {} KB\n", data_size / 1024);
+    printf("   Saved: %s\n", filename.c_str());
+    printf("   Size: %d KB\n", data_size / 1024);
     
     return true;
 }
@@ -612,16 +891,19 @@ void BellSynthesizer::write_wav_header(std::ofstream& file, int data_size) const
     file.write(reinterpret_cast<const char*>(&subchunk2_size), 4);
 }
 
+// =========================================================================
+// АНАЛИЗ СПЕКТРА
+// =========================================================================
+
 void BellSynthesizer::analyze_spectrum(const std::vector<double>& frequencies) {
     if (audio_.empty()) return;
     
     size_t n = audio_.size();
     double dt = 1.0 / config_.sample_rate;
     
-    fmt::print("\n🎵 СПЕКТР СИНТЕЗИРОВАННОГО ЗВУКА:\n");
-    fmt::print("   {:-<60}\n", "");
-    fmt::print("   Основные частоты (Гц):\n");
-    fmt::print("   {:-<60}\n", "");
+    printf("\n--- SPECTRUM ---\n");
+    printf("   Target frequencies (Hz):\n");
+    printf("   ------------------------\n");
     
     double time_norm = 1.0 / n;
     
@@ -638,39 +920,38 @@ void BellSynthesizer::analyze_spectrum(const std::vector<double>& frequencies) {
         double amp = std::sqrt(real * real + imag * imag) * time_norm;
         
         if (amp > 0.0001) {
-            fmt::print("   {:.1f} Гц : {:.3f} мВ\n", freq, amp * 1000.0);
+            printf("   %.1f Hz : %.3f mV\n", freq, amp * 1000.0);
         }
     }
     
-    fmt::print("   {:-<60}\n", "");
+    printf("   ------------------------\n");
 }
 
 void BellSynthesizer::print_spectrum(const std::vector<Mode>& modes) const {
     if (modes.empty()) return;
     
-    fmt::print("\n🎵 СПЕКТР МОД:\n");
-    fmt::print("   {:-<60}\n", "");
-    fmt::print("   № | Частота(Гц) | T60(с) | Атака(с) | Амплитуда\n");
-    fmt::print("   {:-<60}\n", "");
+    printf("\n--- MODE SPECTRUM ---\n");
+    printf("   # | Freq(Hz) | T60(s) | Attack(s) | Amplitude\n");
+    printf("   ---------------------------------------------\n");
     
     for (size_t i = 0; i < modes.size() && i < 25; ++i) {
         const auto& m = modes[i];
-        fmt::print("   {:2d} | {:10.1f} | {:6.1f} | {:7.3f} | {:8.6f}\n",
-                   i+1, m.frequency, m.decay_time, m.attack_time, m.amplitude);
+        printf("   %2zu | %10.1f | %6.1f | %7.3f | %8.6f\n",
+               i+1, m.frequency, m.decay_time, m.attack_time, m.amplitude);
     }
-    fmt::print("   {:-<60}\n", "");
+    printf("   ---------------------------------------------\n");
 }
 
+// =========================================================================
+// FFT АНАЛИЗ
+// =========================================================================
+
+#ifdef USE_FFTW
 void BellSynthesizer::analyze_fft(int fft_size) {
     if (audio_.empty()) {
-        fmt::print(stderr, "Ошибка: нет аудио для FFT анализа\n");
+        fmt::print(stderr, "Error: no audio for FFT analysis\n");
         return;
     }
-
-#ifndef USE_FFTW
-    fmt::print(stderr, "Ошибка: FFTW не доступен. Пересоберите проект с USE_FFTW\n");
-    return;
-#endif
 
     size_t max_fft_size = 65536;
     size_t target = (fft_size <= 0) ? std::min(audio_.size(), max_fft_size) 
@@ -681,19 +962,18 @@ void BellSynthesizer::analyze_fft(int fft_size) {
     while (n < target) n <<= 1;
 
     if (n < 2) {
-        fmt::print(stderr, "Ошибка: размер FFT слишком мал (n < 2)\n");
+        fmt::print(stderr, "Error: FFT size too small (n < 2)\n");
         return;
     }
 
-    fmt::print("   Выполняется FFT (размер: {}, разрешение: {:.1f} Гц)...\n", 
-               n, (config_.sample_rate / n));
+    double resolution = static_cast<double>(config_.sample_rate) / static_cast<double>(n);
+    printf("   Performing FFT (size: %zu, resolution: %.1f Hz)...\n", n, resolution);
 
-#ifdef USE_FFTW
     fftw_complex* in = (fftw_complex*)fftw_malloc(sizeof(fftw_complex) * n);
     fftw_complex* out = (fftw_complex*)fftw_malloc(sizeof(fftw_complex) * n);
     
     if (!in || !out) {
-        fmt::print(stderr, "Ошибка: не удалось выделить память для FFT\n");
+        fmt::print(stderr, "Error: failed to allocate memory for FFT\n");
         if (in) fftw_free(in);
         if (out) fftw_free(out);
         return;
@@ -720,8 +1000,8 @@ void BellSynthesizer::analyze_fft(int fft_size) {
     double window_compensation = 2.0;
     
     for (size_t i = 0; i < n / 2; ++i) {
-        double freq = i / (n * dt);
-        double mag = std::sqrt(out[i][0] * out[i][0] + out[i][1] * out[i][1]) / n * window_compensation;
+        double freq = static_cast<double>(i) / (static_cast<double>(n) * dt);
+        double mag = std::sqrt(out[i][0] * out[i][0] + out[i][1] * out[i][1]) / static_cast<double>(n) * window_compensation;
         fft_frequencies_.push_back(freq);
         fft_magnitudes_.push_back(mag);
     }
@@ -729,19 +1009,18 @@ void BellSynthesizer::analyze_fft(int fft_size) {
     fftw_destroy_plan(plan);
     fftw_free(in);
     fftw_free(out);
-#endif
 }
+#endif
 
 void BellSynthesizer::print_fft_peaks(const std::vector<double>& target_frequencies) {
     if (fft_frequencies_.empty()) {
-        fmt::print(stderr, "Сначала выполните analyze_fft()\n");
+        fmt::print(stderr, "Please run analyze_fft() first\n");
         return;
     }
 
-    fmt::print("\n📊 СПЕКТР (ТОЛЬКО ЗАДАННЫЕ ЧАСТОТЫ):\n");
-    fmt::print("   {:-<60}\n", "");
-    fmt::print("   Частота(Гц) | Амплитуда\n");
-    fmt::print("   {:-<60}\n", "");
+    printf("\n--- SPECTRUM PEAKS ---\n");
+    printf("   Frequency(Hz) | Amplitude\n");
+    printf("   -------------------------\n");
 
     double freq_resolution = (fft_frequencies_.size() > 1) ? 
                              (fft_frequencies_[1] - fft_frequencies_[0]) : 0.5;
@@ -762,26 +1041,26 @@ void BellSynthesizer::print_fft_peaks(const std::vector<double>& target_frequenc
         }
         
         if (best_mag > 0.0) {
-            fmt::print("   {:.2f} Гц -> {:.6f} (найдено {:.2f} Гц)\n", 
-                       target_freq, best_mag, best_freq);
+            printf("   %.2f Hz -> %.6f (found %.2f Hz)\n", 
+                   target_freq, best_mag, best_freq);
         } else {
-            fmt::print("   {:.2f} Гц -> НЕ НАЙДЕНА\n", target_freq);
+            printf("   %.2f Hz -> NOT FOUND\n", target_freq);
         }
     }
     
-    fmt::print("   {:-<60}\n", "");
+    printf("   -------------------------\n");
 }
 
 void BellSynthesizer::save_spectrum_csv(const std::string& filename, 
                                         const std::vector<double>& target_frequencies) {
     if (fft_frequencies_.empty()) {
-        fmt::print(stderr, "Сначала выполните analyze_fft()\n");
+        fmt::print(stderr, "Please run analyze_fft() first\n");
         return;
     }
 
     std::ofstream file(filename);
     if (!file.is_open()) {
-        fmt::print(stderr, "Ошибка: не удалось создать {}\n", filename);
+        fmt::print(stderr, "Error: failed to create {}\n", filename);
         return;
     }
 
@@ -820,19 +1099,19 @@ void BellSynthesizer::save_spectrum_csv(const std::string& filename,
     
     file.close();
     
-    fmt::print("   Спектр сохранён: {} ({} из {} частот найдено)\n", 
-               filename, found_count, target_frequencies.size());
+    printf("   Spectrum saved: %s (%d of %zu frequencies found)\n", 
+           filename.c_str(), found_count, target_frequencies.size());
 }
 
 void BellSynthesizer::save_all_envelopes_csv(const std::string& filename) {
     if (envelope_cache_.empty()) {
-        fmt::print(stderr, "Ошибка: огибающие ещё не рассчитаны\n");
+        fmt::print(stderr, "Error: envelopes not computed yet\n");
         return;
     }
 
     std::ofstream file(filename);
     if (!file.is_open()) {
-        fmt::print(stderr, "Ошибка: не удалось создать {}\n", filename);
+        fmt::print(stderr, "Error: failed to create {}\n", filename);
         return;
     }
 
@@ -867,7 +1146,7 @@ void BellSynthesizer::save_all_envelopes_csv(const std::string& filename) {
     }
     
     file.close();
-    fmt::print("   Все огибающие сохранены: {}\n", filename);
+    printf("   All envelopes saved: %s\n", filename.c_str());
 }
 
-}
+} // namespace BellOptimizer
