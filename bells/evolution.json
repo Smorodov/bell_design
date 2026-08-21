@@ -1,7 +1,7 @@
 {
-    "population_size": 30,
-    "generations": 30,
-    "num_elite": 6,
+    "population_size": 50,
+    "generations": 50,
+    "num_elite": 10,
     "mutation_probability": 0.1,
     "mutation_strength": 0.05,
     "num_knots": 5

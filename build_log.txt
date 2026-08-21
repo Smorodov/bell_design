@@ -1,4 +1,4 @@
-Build started at 20.08.2026 16:21:08,24 
+Build started at 21.08.2026 13:42:10,86 
 -- Using the multi-header code from E:/projects/bell/bell_optimizer/build/_deps/json-src/include/
 -- Version: 10.2.1
 -- Build type: Release
@@ -30,12 +30,12 @@ Build started at 20.08.2026 16:21:08,24
 --   PolyBLEP:       INCLUDED
 -- ========================================
 -- 
--- Configuring done (3.9s)
+-- Configuring done (4.6s)
 -- Generating done (0.1s)
 -- Build files have been written to: E:/projects/bell/bell_optimizer/build
 [ 27%] Built target fmt
-[ 63%] Built target bell_opt
-[ 72%] Building CXX object bell_synth/CMakeFiles/bell_synth.dir/src/main.cpp.obj
-[ 81%] Building CXX object bell_synth/CMakeFiles/bell_synth.dir/src/bell_synthesis.cpp.obj
-[ 90%] Linking CXX executable ..\bell_synth.exe
-[100%] Built target bell_synth
+[ 36%] Building CXX object CMakeFiles/bell_opt.dir/src/bell_optimizer.cpp.obj
+[ 72%] Built target bell_synth
+[ 81%] Linking CXX executable bell_opt.exe
+Copying NLopt DLL
+[100%] Built target bell_opt

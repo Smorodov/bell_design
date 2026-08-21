@@ -192,7 +192,7 @@ bool EvolutionaryOptimizer::loadBestFromFile(const std::string& filename) {
                targets_.prime_freq_target);
     
     // ============================================================
-    // 1. РАСЧИТЫВАЕМ ЗАГРУЖЕННУЮ ГЕОМЕТРИЮ
+    // 1. РАСЧИТЫВАЕМ ЗАГРУЖЕННУЮ ГЕОМЕТРИЮ (ОДИН РАЗ)
     // ============================================================
     BellMeshConfig config;
     config.nNodes = 15;
@@ -238,7 +238,7 @@ bool EvolutionaryOptimizer::loadBestFromFile(const std::string& filename) {
     fmt::print("   Current Prime: {:.2f} Hz\n", prime_freq);
     
     // ============================================================
-    // 2. МАСШТАБИРУЕМ ПОД НОВУЮ ЦЕЛЕВУЮ ЧАСТОТУ
+    // 2. ВЫЧИСЛЯЕМ МАСШТАБ (ПРАВИЛЬНАЯ ФОРМУЛА!)
     // ============================================================
     double scale = prime_freq / targets_.prime_freq_target;
     
@@ -249,13 +249,23 @@ bool EvolutionaryOptimizer::loadBestFromFile(const std::string& filename) {
     
     fmt::print("   Scale factor: {:.3f}\n", scale);
     
+    // ============================================================
+    // 3. МАСШТАБИРУЕМ ГЕОМЕТРИЮ
+    // ============================================================
     BellGeometry scaled_geometry = loaded_geometry;
     scaled_geometry.scale(scale);
     
     // ============================================================
-    // 3. ПРОВЕРКИ ПОСЛЕ МАСШТАБИРОВАНИЯ (ТОЛЬКО ПРОПОРЦИИ)
+    // 4. МАСШТАБИРУЕМ ЧАСТОТЫ АНАЛИТИЧЕСКИ (БЕЗ ВТОРОГО ЗАПУСКА!)
     // ============================================================
+    CCXData scaled_data = first_data;
+    for (auto& mode : scaled_data.modes) {
+        mode.frequency_hz /= scale;  // ω_new = ω_old / scale
+    }
     
+    // ============================================================
+    // 5. ПРОВЕРКИ ПОСЛЕ МАСШТАБИРОВАНИЯ (ПРОПОРЦИИ НЕ МЕНЯЮТСЯ!)
+    // ============================================================
     double t_top_ratio = scaled_geometry.t_top / scaled_geometry.H;
     double t_bottom_ratio = scaled_geometry.t_bottom / scaled_geometry.H;
     
@@ -279,38 +289,7 @@ bool EvolutionaryOptimizer::loadBestFromFile(const std::string& filename) {
     fmt::print("   t_top/H = {:.4f}, t_bottom/H = {:.4f}\n", t_top_ratio, t_bottom_ratio);
     
     // ============================================================
-    // 4. ПЕРЕСЧИТЫВАЕМ МАСШТАБИРОВАННУЮ ГЕОМЕТРИЮ
-    // ============================================================
-    generator.setGeometry(scaled_geometry);
-    
-    if (!generator.buildMesh()) {
-        fmt::print("   ❌ Failed to build mesh for scaled geometry\n");
-        return false;
-    }
-    
-    if (!generator.saveToFile("bell.inp")) {
-        fmt::print("   ❌ Failed to save bell.inp for scaled geometry\n");
-        return false;
-    }
-    
-#ifdef _WIN32
-    ccx_result = std::system("ccx bell > nul 2>&1");
-#else
-    ccx_result = std::system("ccx bell > /dev/null 2>&1");
-#endif
-    if (ccx_result != 0) {
-        fmt::print("   ❌ CalculiX failed for scaled geometry\n");
-        return false;
-    }
-    
-    CCXData scaled_data = BellOptimizer::CCXParser::parse_file("bell.dat", true);
-    if (scaled_data.modes.empty()) {
-        fmt::print("   ❌ No modes found for scaled geometry\n");
-        return false;
-    }
-    
-    // ============================================================
-    // 5. СОХРАНЯЕМ ПЕРЕСЧИТАННЫЕ ДАННЫЕ
+    // 6. СОХРАНЯЕМ ПЕРЕСЧИТАННЫЕ ДАННЫЕ
     // ============================================================
     setInitialGuess(scaled_geometry);
     best_error_ = computeError(scaled_data, scaled_geometry);
@@ -615,12 +594,15 @@ double EvolutionaryOptimizer::computeError(const CCXData& ccx_data, const BellGe
 }
 
 // ============================================================
-// ОЦЕНКА КАНДИДАТА (С ПРОПОРЦИОНАЛЬНЫМИ ПРОВЕРКАМИ)
+// ОЦЕНКА КАНДИДАТА (ОДИН ЗАПУСК + АНАЛИТИЧЕСКОЕ МАСШТАБИРОВАНИЕ)
 // ============================================================
 double EvolutionaryOptimizer::evaluateCandidate(BellGeometry& geometry, CCXData& out_data) {
     BellMeshConfig config;
     config.nNodes = 15;
     
+    // ============================================================
+    // ЭТАП 1: ГЕНЕРАЦИЯ СЕТКИ
+    // ============================================================
     BellGenerator generator(material_, config);
     generator.setGeometry(geometry);
     
@@ -637,6 +619,9 @@ double EvolutionaryOptimizer::evaluateCandidate(BellGeometry& geometry, CCXData&
         return 1e9;
     }
     
+    // ============================================================
+    // ЭТАП 2: ОДИН ЗАПУСК CALCULIX
+    // ============================================================
 #ifdef _WIN32
     int ccx_result = std::system("ccx bell > nul 2>&1");
 #else
@@ -646,35 +631,50 @@ double EvolutionaryOptimizer::evaluateCandidate(BellGeometry& geometry, CCXData&
         return 1e9;
     }
     
-    CCXData first_data = BellOptimizer::CCXParser::parse_file("bell.dat", true);
-    if (first_data.modes.empty()) {
+    // ============================================================
+    // ЭТАП 3: ПАРСИНГ РЕЗУЛЬТАТОВ
+    // ============================================================
+    CCXData raw_data = BellOptimizer::CCXParser::parse_file("bell.dat", true);
+    if (raw_data.modes.empty()) {
         return 1e9;
     }
     
     double prime_freq = 0.0;
-    if (first_data.modes.size() > 1) {
-        prime_freq = first_data.modes[1].frequency_hz;
+    if (raw_data.modes.size() > 1) {
+        prime_freq = raw_data.modes[1].frequency_hz;
     }
     
     if (prime_freq < 1.0) {
         return 1e9;
     }
     
+    // ============================================================
+    // ЭТАП 4: ВЫЧИСЛЯЕМ МАСШТАБ
+    // ============================================================
     double scale = prime_freq / targets_.prime_freq_target;
     
     if (scale < 0.05 || scale > 20.0) {
         return 1e9;
     }
     
-    BellGeometry scaled_geometry = geometry;
-    scaled_geometry.scale(scale);
+    // ============================================================
+    // ЭТАП 5: МАСШТАБИРУЕМ ГЕОМЕТРИЮ (ДЛЯ СОХРАНЕНИЯ)
+    // ============================================================
+    geometry.scale(scale);
     
     // ============================================================
-    // ПРОВЕРКИ ПОСЛЕ МАСШТАБИРОВАНИЯ (ТОЛЬКО ПРОПОРЦИИ)
+    // ЭТАП 6: МАСШТАБИРУЕМ ЧАСТОТЫ АНАЛИТИЧЕСКИ
     // ============================================================
+    out_data = raw_data;
+    for (auto& mode : out_data.modes) {
+        mode.frequency_hz /= scale;  // ω_new = ω_old / scale
+    }
     
-    double t_top_ratio = scaled_geometry.t_top / scaled_geometry.H;
-    double t_bottom_ratio = scaled_geometry.t_bottom / scaled_geometry.H;
+    // ============================================================
+    // ЭТАП 7: ПРОВЕРКИ ПРОПОРЦИЙ (НЕ МЕНЯЮТСЯ ПРИ МАСШТАБЕ!)
+    // ============================================================
+    double t_top_ratio = geometry.t_top / geometry.H;
+    double t_bottom_ratio = geometry.t_bottom / geometry.H;
     
     if (t_top_ratio < 0.005 || t_top_ratio > 0.050) {
         return 1e9;
@@ -683,42 +683,16 @@ double EvolutionaryOptimizer::evaluateCandidate(BellGeometry& geometry, CCXData&
         return 1e9;
     }
     
-    double diameter = 2.0 * scaled_geometry.R_mouth;
-    double ratio_diam = diameter / scaled_geometry.H;
+    double diameter = 2.0 * geometry.R_mouth;
+    double ratio_diam = diameter / geometry.H;
     if (ratio_diam < 0.7 || ratio_diam > 1.3) {
         return 1e9;
     }
     
     // ============================================================
-    // ВТОРОЙ РАСЧЁТ
+    // ЭТАП 8: ВЫЧИСЛЯЕМ ОШИБКУ
     // ============================================================
-    generator.setGeometry(scaled_geometry);
-    
-    if (!generator.buildMesh()) {
-        return 1e9;
-    }
-    
-    if (!generator.saveToFile("bell.inp")) {
-        return 1e9;
-    }
-    
-#ifdef _WIN32
-    ccx_result = std::system("ccx bell > nul 2>&1");
-#else
-    ccx_result = std::system("ccx bell > /dev/null 2>&1");
-#endif
-    if (ccx_result != 0) {
-        return 1e9;
-    }
-    
-    out_data = BellOptimizer::CCXParser::parse_file("bell.dat", true);
-    if (out_data.modes.empty()) {
-        return 1e9;
-    }
-    
-    geometry = scaled_geometry;
-    
-    return computeError(out_data, scaled_geometry);
+    return computeError(out_data, geometry);
 }
 
 // ============================================================
@@ -903,6 +877,7 @@ void EvolutionaryOptimizer::run() {
     fmt::print("  Population: {}\n", evo_params_.population_size);
     fmt::print("  Generations: {}\n", evo_params_.generations);
     fmt::print("  Mutation: {:.0f}%\n", evo_params_.mutation_probability * 100);
+    fmt::print("  Mode: ONE CalculiX run per candidate (analytical scaling)\n");
     fmt::print("{:=^60}\n\n", "");
     
     auto start_total = std::chrono::high_resolution_clock::now();
@@ -977,6 +952,8 @@ void EvolutionaryOptimizer::run() {
     fmt::print("{:=^60}\n", "");
     fmt::print("  Best error: {:.6f}\n", best_error_);
     fmt::print("  Time: {:.1f} s\n", duration / 1000.0);
+    fmt::print("  CalculiX runs: {} (saved 50% time!)\n", 
+               evo_params_.population_size * (evo_params_.generations + 1));
     fmt::print("{:=^60}\n", "");
     
     printFinal(elite.front());

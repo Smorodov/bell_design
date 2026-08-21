@@ -9,6 +9,7 @@
     "tail_factor": 1.2,
     "impact_force": 1.0,
     "target_peak": 0.95,
+    
     "envelope_threshold": 0.00001,
     "use_tail_trimming": true,
     
