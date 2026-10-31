@@ -1,0 +1,10 @@
+{
+    "tuning_model": "western_five_partial",
+    "tradition": "neutral",
+    "tuning_name": "standard_minor_third_reference",
+    "prime_freq_target": 440.0,
+    "freq_ratios": [0.5, 1.2, 1.5, 2.0],
+    "amp_ratios": [0.8, 0.6, 0.4, 0.2],
+    "freq_weights": [2.0, 1.0, 1.0, 1.0],
+    "amp_weights": [1.0, 1.0, 1.0, 1.0]
+}

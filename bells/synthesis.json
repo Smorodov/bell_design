@@ -5,22 +5,13 @@
     "fade_in": 0.003,
     "fade_out": 0.3,
     "loss_factor": 0.0005,
-    "nonlinear_damping": 0.6,
     "tail_factor": 1.2,
-    "impact_force": 1.0,
     "target_peak": 0.95,
     
     "envelope_threshold": 0.00001,
     "use_tail_trimming": true,
     
-    "waveform_type": "mixed",
     
-    "reverb_mix": 0.05,
-    "reverb_delay": 0.02,
-    "reverb_feedback": 0.3,
-    
-    "use_stereo_modulation": true,
-    "stereo_depth": 0.002,
-    "stereo_rate": 0.15,
-    "stereo_mix": 0.25
+    "reverb_mix": 0.0,
+    "reverb_feedback": 0.3
 }

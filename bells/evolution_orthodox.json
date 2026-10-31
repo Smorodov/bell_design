@@ -1,0 +1,11 @@
+{
+    "population_size": 8,
+    "generations": 6,
+    "num_elite": 3,
+    "mutation_probability": 0.2,
+    "mutation_strength": 0.08,
+    "num_knots": 9,
+    "seed_family": "orthodox",
+    "deterministic": true,
+    "seed": 18071991
+}

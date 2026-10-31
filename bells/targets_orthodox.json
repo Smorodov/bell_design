@@ -1,0 +1,11 @@
+{
+    "tuning_model": "western_five_partial_reference",
+    "tradition": "russian_orthodox",
+    "tuning_name": "orthodox_rich_spectrum_reference",
+    "prime_freq_target": 440.0,
+    "freq_ratios": [0.5, 1.2, 1.5, 2.0],
+    "amp_ratios": [0.8, 0.6, 0.4, 0.2],
+    "freq_weights": [0.25, 0.25, 0.25, 0.25],
+    "amp_weights": [0.5, 0.5, 0.5, 0.5],
+    "note": "Reference-only modal target. Russian Orthodox bells are not defined by one universal five-partial tuning; use this for geometry/sound comparison, not historical certification."
+}

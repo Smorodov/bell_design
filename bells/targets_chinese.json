@@ -1,0 +1,11 @@
+{
+    "tuning_model": "dual_tone_chinese",
+    "tradition": "chinese_zhong",
+    "tuning_name": "dual_tone_minor_or_major_third",
+    "primary_tone_ratio": 1.0,
+    "minor_third_ratio": 1.2,
+    "major_third_ratio": 1.25,
+    "secondary_tone_ratio_range": [1.2, 1.25],
+    "interval_semitones": [3, 4],
+    "note": "Traditional zhong bells produce two strike-dependent pitches, commonly separated by a minor or major third. The present axisymmetric FEM cannot represent the required non-axisymmetric/elliptical cross-section and two strike locations. This file is a tuning specification only and is intentionally not accepted by the current optimizer."
+}

@@ -1,11 +1,10 @@
 {
-    "prime_freq_target": 432.0,
-    "freq_ratios": [0.5, 1.25, 1.5, 2.0],
+    "tuning_model": "western_five_partial",
+    "tradition": "european",
+    "tuning_name": "ideal_minor_third_bell",
+    "prime_freq_target": 864.0,
+    "freq_ratios": [0.5, 1.2, 1.5, 2.0],
     "amp_ratios": [0.8, 0.6, 0.4, 0.2],
     "freq_weights": [2.0, 1.0, 1.0, 1.0],
-    "amp_weights": [1.0, 1.0, 1.0, 1.0],
-    "prime_weight": 0.0,
-    "k_prime": 20.0,
-    "k_freq": 20.0,
-    "k_amp": 5.0
+    "amp_weights": [1.0, 1.0, 1.0, 1.0]
 }

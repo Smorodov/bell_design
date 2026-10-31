@@ -1,0 +1,5 @@
+BellOptimizer coordinate-morphing listening sample
+q=b/a: 1
+Frequency model: single-mode Rayleigh quotient on transformed baseline mode shapes
+Acoustic modal amplitudes and phases: baseline estimates, not recalculated for the non-axisymmetric field
+This is a listening preview, not a validated prediction of a physical elliptical bell.

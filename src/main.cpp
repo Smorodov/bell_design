@@ -1,163 +1,98 @@
-// main.cpp
-#include "bell_optimizer.h"
-#include "bell_generator.h"
-#include <iostream>
-#include <iomanip>
-#include <chrono>
-#include <fstream>
+#include "commands/optimize.hpp"
+#include "commands/synthesize.hpp"
+#include "commands/synthesize_geometry.hpp"
 
-#include <fmt/format.h>
-#include <nlohmann/json.hpp>
+#include <iostream>
+#include <string>
+#include <vector>
+#include <filesystem>
 
 #ifdef _WIN32
 #include <windows.h>
 #endif
 
-using json = nlohmann::json;
+namespace {
 
-int main() {
-    #ifdef _WIN32
-        SetConsoleOutputCP(CP_UTF8);
-    #endif
+void print_help() {
+    std::cout
+        << "BellOptimizer 1.2.96\n\n"
+        << "Usage:\n"
+        << "  bell optimize [--solver=ccx|internal]\n"
+        << "  bell synth [file.dat]\n  bell synth-geometry [geometry.json] [--ellipticity q] [--output file.wav]\n"
+        << "  bell --help\n"
+        << "  bell --version\n"
+        << "\n"
+        << "Global option:\n"
+        << "  --workdir <dir>    Working directory containing JSON/config/data files\n"
+        << "\n"
+        << "Examples:\n"
+        << "  bell optimize --solver=internal --workdir bells\n"
+        << "  bell synth best_bell.dat --workdir bells\n  bell synth-geometry best_geometry.json --ellipticity 0.85 --output bell_elliptic.wav --workdir bells\n";
+}
 
-    // ============================================================
-    // 1. МАТЕРИАЛ
-    // ============================================================
-    BellMaterial material;
-    material.E = 1.1e4;
-    material.nu = 0.34;
-    material.rho = 8.6e-9;
-
-    // ============================================================
-    // 2. ЧТЕНИЕ ЦЕЛЕЙ ИЗ JSON
-    // ============================================================
-    TargetData targets;
-    
-    try {
-        std::ifstream targets_file("targets.json");
-        if (targets_file.is_open()) {
-            json data = json::parse(targets_file);
-            
-            targets.prime_freq_target = data.value("prime_freq_target", 432.0);
-            
-            if (data.contains("freq_ratios") && data["freq_ratios"].is_array()) {
-                auto arr = data["freq_ratios"];
-                for (size_t i = 0; i < 4 && i < arr.size(); ++i) {
-                    targets.freq_ratios[i] = arr[i].get<double>();
-                }
+bool set_workdir(int argc, char** argv) {
+    for (int i = 1; i < argc; ++i) {
+        std::string arg = argv[i];
+        if (arg == "--workdir") {
+            if (i + 1 >= argc) {
+                std::cerr << "Error: --workdir requires a directory.\n";
+                return false;
             }
-            
-            if (data.contains("amp_ratios") && data["amp_ratios"].is_array()) {
-                auto arr = data["amp_ratios"];
-                for (size_t i = 0; i < 4 && i < arr.size(); ++i) {
-                    targets.amp_ratios[i] = arr[i].get<double>();
-                }
+            try {
+                std::filesystem::current_path(argv[++i]);
+            } catch (const std::exception& e) {
+                std::cerr << "Error: cannot change working directory: " << e.what() << "\n";
+                return false;
             }
-            
-            if (data.contains("freq_weights") && data["freq_weights"].is_array()) {
-                auto arr = data["freq_weights"];
-                for (size_t i = 0; i < 4 && i < arr.size(); ++i) {
-                    targets.freq_weights[i] = arr[i].get<double>();
-                }
+        } else if (arg.rfind("--workdir=", 0) == 0) {
+            try {
+                std::filesystem::current_path(arg.substr(10));
+            } catch (const std::exception& e) {
+                std::cerr << "Error: cannot change working directory: " << e.what() << "\n";
+                return false;
             }
-            
-            if (data.contains("amp_weights") && data["amp_weights"].is_array()) {
-                auto arr = data["amp_weights"];
-                for (size_t i = 0; i < 4 && i < arr.size(); ++i) {
-                    targets.amp_weights[i] = arr[i].get<double>();
-                }
-            }
-            
-            targets.prime_weight = data.value("prime_weight", 0.0);
-            targets.k_prime = data.value("k_prime", 20.0);
-            targets.k_freq = data.value("k_freq", 20.0);
-            targets.k_amp = data.value("k_amp", 5.0);
-            
-            fmt::print("✅ Загружены цели из targets.json\n");
-        } else {
-            fmt::print("⚠️ Файл targets.json не найден, используются значения по умолчанию\n");
         }
-    } catch (const std::exception& e) {
-        fmt::print(stderr, "❌ Ошибка чтения targets.json: {}\n", e.what());
-        fmt::print("   Используются значения по умолчанию\n");
+    }
+    return true;
+}
+
+} // namespace
+
+int main(int argc, char** argv) {
+#ifdef _WIN32
+    SetConsoleOutputCP(CP_UTF8);
+#endif
+
+    if (argc < 2) {
+        print_help();
+        return 0;
     }
 
-    // ============================================================
-    // 3. ЧТЕНИЕ ПАРАМЕТРОВ ЭВОЛЮЦИИ ИЗ JSON
-    // ============================================================
-    EvolutionParams evo;
-    
-    try {
-        std::ifstream evo_file("evolution.json");
-        if (evo_file.is_open()) {
-            json data = json::parse(evo_file);
-            
-            evo.population_size = data.value("population_size", 30);
-            evo.generations = data.value("generations", 30);
-            evo.num_elite = data.value("num_elite", 6);
-            evo.mutation_probability = data.value("mutation_probability", 0.1);
-            evo.mutation_strength = data.value("mutation_strength", 0.05);
-            evo.num_knots = data.value("num_knots", 5);
-            
-            fmt::print("✅ Загружены параметры эволюции из evolution.json\n");
-        } else {
-            fmt::print("⚠️ Файл evolution.json не найден, используются значения по умолчанию\n");
-        }
-    } catch (const std::exception& e) {
-        fmt::print(stderr, "❌ Ошибка чтения evolution.json: {}\n", e.what());
-        fmt::print("   Используются значения по умолчанию\n");
+    const std::string command = argv[1];
+    if (command == "--help" || command == "-h" || command == "help") {
+        print_help();
+        return 0;
+    }
+    if (command == "--version" || command == "-V" || command == "version") {
+        std::cout << "BellOptimizer 1.2.96\n";
+        return 0;
     }
 
-    // ============================================================
-    // 4. ЗАПУСК ОПТИМИЗАЦИИ
-    // ============================================================
-    fmt::print("\n{:=^60}\n", "");
-    fmt::print("{:=^60}\n", "  BELL OPTIMIZER - Orthodox Bell Tuning  ");
-    fmt::print("{:=^60}\n\n", "");
-    
-    fmt::print("  Material: E={:.1f} MPa, nu={:.2f}, rho={:.2e} t/mm^3\n", 
-               material.E, material.nu, material.rho);
-    fmt::print("  Target Prime: {:.1f} Hz\n", targets.prime_freq_target);
-    fmt::print("  Target ratios (relative to Prime):\n");
-    fmt::print("    Hum     = {:.2f}  ({:.1f} Hz)\n", targets.freq_ratios[0], targets.prime_freq_target * targets.freq_ratios[0]);
-    fmt::print("    Tertia  = {:.2f}  ({:.1f} Hz)\n", targets.freq_ratios[1], targets.prime_freq_target * targets.freq_ratios[1]);
-    fmt::print("    Quinta  = {:.2f}  ({:.1f} Hz)\n", targets.freq_ratios[2], targets.prime_freq_target * targets.freq_ratios[2]);
-    fmt::print("    Nominal = {:.2f}  ({:.1f} Hz)\n", targets.freq_ratios[3], targets.prime_freq_target * targets.freq_ratios[3]);
-    fmt::print("  Population size: {}\n", evo.population_size);
-    fmt::print("  Generations: {}\n", evo.generations);
-    fmt::print("  Elite count: {}\n", evo.num_elite);
-    fmt::print("  Mutation probability: {:.0f}%\n", evo.mutation_probability * 100);
-    fmt::print("  Knots: {}\n", evo.num_knots);
-    fmt::print("{:=^60}\n\n", "");
-
-    auto start = std::chrono::high_resolution_clock::now();
-
-    EvolutionaryOptimizer optimizer(material, targets, evo);
-    
-    // ============================================================
-    // 5. ПРОВЕРКА НАЛИЧИЯ СОХРАНЁННОГО РЕЗУЛЬТАТА
-    // ============================================================
-    std::ifstream check_file("best_geometry.json");
-    if (check_file.good()) {
-        check_file.close();
-        fmt::print("\n📂 Найден сохранённый результат best_geometry.json\n");
-        fmt::print("   Загружаем как начальное приближение...\n");
-        
-        if (optimizer.loadBestFromFile("best_geometry.json")) {
-            fmt::print("   ✅ Продолжаем оптимизацию с сохранённого результата\n");
-            fmt::print("   Загружена ошибка: {:.6f}\n", optimizer.getBestError());
-        } else {
-            fmt::print("   ⚠️ Не удалось загрузить, начинаем с нуля\n");
-        }
-    } else {
-        fmt::print("\n🆕 Сохранённый результат не найден, начинаем с нуля\n");
+    if (!set_workdir(argc, argv)) {
+        return 2;
     }
 
-    optimizer.run();
+    if (command == "optimize") {
+        return command_optimize(argc - 1, argv + 1);
+    }
+    if (command == "synth-geometry" || command == "synthesize-geometry") {
+        return command_synthesize_geometry(argc - 1, argv + 1);
+    }
+    if (command == "synth" || command == "synthesize") {
+        return command_synthesize(argc - 1, argv + 1);
+    }
 
-    auto end = std::chrono::high_resolution_clock::now();
-    fmt::print("\n[TIME] Total: {} ms\n\n",
-               std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count());
-
-    return 0;
+    std::cerr << "Unknown command: " << command << "\n\n";
+    print_help();
+    return 2;
 }

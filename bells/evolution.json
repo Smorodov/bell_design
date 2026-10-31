@@ -4,5 +4,11 @@
     "num_elite": 10,
     "mutation_probability": 0.1,
     "mutation_strength": 0.05,
-    "num_knots": 5
+    "num_knots": 9,
+    "seed_family": "neutral",
+    "deterministic": false,
+    "seed": 0,
+    "optimize_ellipticity": false,
+    "ellipticity_min": 0.7,
+    "ellipticity_max": 1.0
 }
