@@ -7,5 +7,6 @@
     "num_knots": 9,
     "seed_family": "chinese",
     "deterministic": false,
-    "seed": 0
+    "seed": 0,
+    "material": "bell_bronze_reference"
 }

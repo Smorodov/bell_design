@@ -98,7 +98,12 @@ int main() {
         double min_pair_similarity = 1.0;
         ModalData previous = reference;
 
-        for (double q : {0.99, 0.98, 0.97, 0.96}) {
+        // Real-FEM continuation matrix: several ellipticities plus a second
+        // geometry scale.  This remains a validation dataset, not a production
+        // acceptance threshold; the report records the evidence needed to set
+        // ACT-MOD-010..014 without tuning a threshold to a passing case.
+        const std::vector<double> q_sequence{0.99, 0.98, 0.97, 0.96};
+        for (double q : q_sequence) {
             auto current = solve(q, 15, base_harmonics, 64);
 
             // Baseline: global shape assignment, without a frequency-state predictor.
@@ -142,11 +147,15 @@ int main() {
                   << " cross_mesh update=" << (cross_mesh.updated ? 1 : 0)
                   << " ambiguous=" << (cross_mesh.ambiguous ? 1 : 0)
                   << " pair_similarity=" << cross_mesh.pair_subspace_similarity
-                  << " margin=" << cross_mesh.assignment_margin << '\n';
+                  << " margin=" << cross_mesh.assignment_margin
+                  << " freq_compatible=" << cross_mesh.frequency_compatible_assignments
+                  << " subspace_rejected=" << cross_mesh.subspace_rejected_assignments
+                  << " best_rejected_pair=" << cross_mesh.best_rejected_subspace_similarity << '\n';
 
-        // Fourier enrichment at fixed mesh: do not assume the state tracker
-        // must accept a basis change; report whether the physical family remains
-        // identifiable and fail only on malformed output or invalid numerics.
+        // Adding an unused higher harmonic should not destabilize already
+        // converged low-order modal families. The exact axis constraints and
+        // physical-mode window make this enrichment a stability check rather
+        // than an expected rejection.
         auto enriched = solve(0.94, 23, {0, 2, 4, 6}, 128);
         auto enriched_baseline = enriched;
         const auto enriched_shape = trackModalFamilies(refined, enriched_baseline);
@@ -156,22 +165,27 @@ int main() {
                   << " ambiguous=" << (enriched_report.ambiguous ? 1 : 0)
                   << " no_compatible=" << (enriched_report.no_compatible_assignment ? 1 : 0)
                   << " pair_similarity=" << enriched_report.pair_subspace_similarity
-                  << " margin=" << enriched_report.assignment_margin << '\n';
-
+                  << " margin=" << enriched_report.assignment_margin
+                  << " freq_compatible=" << enriched_report.frequency_compatible_assignments
+                  << " subspace_rejected=" << enriched_report.subspace_rejected_assignments
+                  << " best_rejected_pair=" << enriched_report.best_rejected_subspace_similarity << '\n';
         require(shape_matches >= 2, "baseline shape matcher did not produce enough FEM matches");
-        require(kalman_updates >= 4,
+        require(kalman_updates >= q_sequence.size(),
                 "state tracker failed to continue the same-mesh FEM sequence");
         require(cross_mesh.updated,
                 "state tracker failed to continue across profile mesh refinement");
-        require(enriched_report.no_compatible_assignment || enriched_report.ambiguous ||
-                    enriched_report.updated,
-                "state tracker returned an unclassified Fourier-enrichment result");
+        require(enriched_report.updated &&
+                enriched_report.pair_subspace_similarity > 0.99,
+                "high-order Fourier enrichment destabilized the retained low-order modal family");
         require(std::isfinite(min_shape_similarity) && std::isfinite(min_pair_similarity),
                 "non-finite tracker diagnostics");
 
+        const double continuation_rate = static_cast<double>(kalman_updates) /
+            static_cast<double>(q_sequence.size());
         std::cout << "summary shape_matches=" << shape_matches
                   << " kalman_updates=" << kalman_updates
                   << " kalman_ambiguous=" << kalman_ambiguous
+                  << " continuation_rate=" << continuation_rate
                   << " min_shape_similarity=" << min_shape_similarity
                   << " min_pair_similarity=" << min_pair_similarity << '\n';
         std::cout << "modal_tracker_fem_continuation: PASS\n";

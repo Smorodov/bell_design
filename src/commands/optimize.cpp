@@ -12,6 +12,7 @@
 
 #include "simple_json.hpp"
 #include "models/bell_model_profile.hpp"
+#include "bell_material.h"
 
 
 
@@ -80,10 +81,9 @@ int command_optimize(int argc, char** argv) {
     // ============================================================
     // 1. МАТЕРИАЛ
     // ============================================================
-    BellMaterial material;
-    material.E = 1.1e4;
-    material.nu = 0.34;
-    material.rho = 8.6e-9;
+    const auto& default_material = BellOptimizer::default_material_preset();
+    std::string material_id = default_material.id;
+    BellMaterial material = default_material.material;
 
     // ============================================================
     // 2. ЧТЕНИЕ ЦЕЛЕЙ ИЗ JSON
@@ -129,9 +129,17 @@ int command_optimize(int argc, char** argv) {
         evo.deterministic = bell::json::boolean(data, "deterministic", false);
         evo.optimize_ellipticity = bell::json::boolean(data, "optimize_ellipticity", false);
         evo.use_direct_elliptical_fem = bell::json::boolean(data, "use_direct_elliptical_fem", false);
-        evo.use_direct_elliptical_fem = bell::json::boolean(data, "use_direct_elliptical_fem", false);
         evo.ellipticity_min = bell::json::number(data, "ellipticity_min", 0.70);
         evo.ellipticity_max = bell::json::number(data, "ellipticity_max", 1.00);
+        material_id = bell::json::string(data, "material", material_id);
+        const auto* material_preset = BellOptimizer::find_material_preset(material_id);
+        if (!material_preset) {
+            std::cerr << "Unknown material preset '" << material_id << "'. Available presets:";
+            for (const auto& id : BellOptimizer::material_preset_ids()) std::cerr << " " << id;
+            std::cerr << "\n";
+            return 2;
+        }
+        material = material_preset->material;
         if (!std::isfinite(evo.ellipticity_min) || !std::isfinite(evo.ellipticity_max) ||
             evo.ellipticity_min < 0.70 || evo.ellipticity_max > 1.0 ||
             evo.ellipticity_min >= evo.ellipticity_max) {
@@ -152,6 +160,7 @@ int command_optimize(int argc, char** argv) {
     std::cout << "  BELL OPTIMIZER - Bell Tuning  \n";
     std::cout << "============================================================\n\n";
     
+    std::cout << "  Material preset: " << material_id << "\n";
     std::cout << std::fixed << std::setprecision(1) << "  Material: E=" << material.E
               << " MPa, nu=" << std::setprecision(2) << material.nu
               << ", rho=" << std::scientific << std::setprecision(2) << material.rho

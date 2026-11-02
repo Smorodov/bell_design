@@ -127,13 +127,24 @@ struct ModalMode {
     std::vector<double> outer_surface_fourier_radial;
     std::vector<double> outer_surface_fourier_azimuthal;
     std::vector<double> outer_surface_fourier_axial;
+    // Mass-normalized displacement samples on the inner wall, in inner_profile order.
+    // Fourier arrays use [profile_point][basis], with basis labels matching the
+    // outer-surface representation. These are boundary kinematics only; they do
+    // not prescribe contact forces or assume a clapper model.
+    std::vector<double> inner_surface_radial;
+    std::vector<double> inner_surface_axial;
+    std::vector<int> inner_surface_harmonics;
+    std::vector<double> inner_surface_fourier_radial;
+    std::vector<double> inner_surface_fourier_azimuthal;
+    std::vector<double> inner_surface_fourier_axial;
     // Full-mesh eigenvector samples in mesh.nodes order, used for independent FEM validation.
     std::vector<double> nodal_radial;
     std::vector<double> nodal_axial;
     // Complete direct-vector-FEM eigenfield in global DOF order:
-    // [node][Fourier basis][ur, uphi, uz], mass-normalized. The associated
-    // diagonal row-sum weights are a lumped-M approximation for diagnostics;
-    // they are not a replacement for the consistent FEM mass matrix.
+    // [node][component][Fourier basis], with component order [ur, uphi, uz]
+    // and basis order given by fem_harmonics. Mass-normalized. The associated
+    // diagonal row-sum weights use the same layout and are a lumped-M
+    // approximation for diagnostics, not a replacement for consistent M.
     std::vector<double> fem_displacement;
     std::vector<double> fem_mass_lumped_weights;
     std::vector<double> fem_node_r;

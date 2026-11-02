@@ -56,36 +56,34 @@ int main() {
     if (!(elliptical_phi_max > 1.0e-8))
         throw std::runtime_error("elliptical surface normal is missing its azimuthal component");
 
-    // The normal is unit length before scalar spatial/Fourier weighting. Verify
-    // the analytic cylindrical normal formula at a representative profile node.
-    const std::size_t i = elliptical.mesh_si.outer_profile.size() / 2;
-    const auto& p = elliptical.mesh_si.outer_profile;
-    const std::size_t j0 = i - 1, j1 = i + 1;
-    const double dr = p[j1].r - p[j0].r;
-    const double dz = p[j1].z - p[j0].z;
-    const double phi = cfg.azimuth_rad;
-    const double q = 0.85;
-    const double invq2 = 1.0 / (q * q);
-    const double d = std::cos(phi) * std::cos(phi) + std::sin(phi) * std::sin(phi) * invq2;
-    const double alpha = 1.0 / std::sqrt(d);
-    const double gphi = -std::sin(phi) * std::cos(phi) * (invq2 - 1.0) / d;
-    const double nr = dz, nphi = -dz * gphi, nz = -alpha * dr;
-    const double expected_norm = std::sqrt(nr * nr + nphi * nphi + nz * nz);
-    const double expected_nr = nr / expected_norm;
-    const double expected_nphi = nphi / expected_norm;
-    const double expected_nz = nz / expected_norm;
-    const std::size_t base = i * 3u * nb;
-    const double actual_nr = elliptical_load.dof_values[base + 0u];
-    const double actual_nphi = elliptical_load.dof_values[base + 1u];
-    const double actual_nz = elliptical_load.dof_values[base + 2u];
-    const double actual_scale = std::sqrt(actual_nr * actual_nr + actual_nphi * actual_nphi + actual_nz * actual_nz);
-    if (!(actual_scale > 0.0)) throw std::runtime_error("missing representative normal load");
-    vector_norm_error = std::max({
-        std::abs(actual_nr / actual_scale - expected_nr),
-        std::abs(actual_nphi / actual_scale - expected_nphi),
-        std::abs(actual_nz / actual_scale - expected_nz)});
-    if (vector_norm_error > 1.0e-12)
-        throw std::runtime_error("computed load direction differs from geometric surface normal");
+    // The load is now the actual angularly integrated surface-force projection,
+    // so a finite angular patch is not expected to equal the pointwise normal
+    // at its centre.  The contract therefore checks symmetry and convergence
+    // properties of the integrated load instead of comparing it with a point
+    // normal.
+    for (std::size_t node = 0; node < elliptical.mesh_si.outer_profile.size(); ++node) {
+        for (std::size_t b = 0; b < nb; ++b) {
+            const std::size_t base = node * 3u * nb + 3u * b;
+            if (!std::isfinite(elliptical_load.dof_values[base + 0u]) ||
+                !std::isfinite(elliptical_load.dof_values[base + 1u]) ||
+                !std::isfinite(elliptical_load.dof_values[base + 2u]))
+                throw std::runtime_error("non-finite integrated strike load");
+        }
+    }
+    const auto elliptical_load_128 = Excitation::make_chinese_bell_strike_influence(
+        elliptical.mesh_si, harmonics, 0.85, cfg, 128);
+    if (elliptical_load_128.dof_values.size() != elliptical_load.dof_values.size())
+        throw std::runtime_error("angular quadrature changed load dimension");
+    double max_relative_quadrature_change = 0.0;
+    for (std::size_t i = 0; i < elliptical_load.dof_values.size(); ++i) {
+        const double scale = std::max({1.0, std::abs(elliptical_load.dof_values[i]),
+                                       std::abs(elliptical_load_128.dof_values[i])});
+        max_relative_quadrature_change = std::max(
+            max_relative_quadrature_change,
+            std::abs(elliptical_load.dof_values[i] - elliptical_load_128.dof_values[i]) / scale);
+    }
+    if (!(max_relative_quadrature_change < 2.0e-3))
+        throw std::runtime_error("angular quadrature convergence is too weak");
 
     std::cout << "chinese_bell_strike_surface_normal_contract: PASS\n";
     std::cout << "circular_azimuthal_component=" << circular_phi_max

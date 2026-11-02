@@ -37,6 +37,9 @@ struct ModalStateTrackerReport {
     double best_assignment_score = 0.0;
     double pair_subspace_similarity = 0.0;
     double assignment_margin = 0.0;
+    std::size_t frequency_compatible_assignments = 0;
+    std::size_t subspace_rejected_assignments = 0;
+    double best_rejected_subspace_similarity = 0.0;
     std::array<ModalTrackEstimate, 2> tracks{};
 };
 

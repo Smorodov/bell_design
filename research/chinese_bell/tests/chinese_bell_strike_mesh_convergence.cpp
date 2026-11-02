@@ -11,7 +11,7 @@
 
 namespace {
 struct Metrics {
-    double integrated_weight = 0.0;
+    double coefficient_norm = 0.0;
     double centroid_z = 0.0;
 };
 
@@ -43,17 +43,27 @@ Metrics evaluate(int nodes, double width) {
     constexpr std::size_t basis_count = 5;
     Metrics out;
     double weighted_z = 0.0;
+    double weight_sum = 0.0;
+    double coefficient_norm2 = 0.0;
     for (std::size_t i = 0; i < model.mesh_si.outer_profile.size(); ++i) {
         const std::size_t base = i * 3u * basis_count;
-        const double nr = load.dof_values[base];
-        const double nphi = load.dof_values[base + 1u];
-        const double nz = load.dof_values[base + 2u];
-        const double weight = std::sqrt(nr * nr + nphi * nphi + nz * nz);
-        out.integrated_weight += weight;
+        double node_norm2 = 0.0;
+        for (std::size_t b = 0; b < basis_count; ++b) {
+            for (std::size_t c = 0; c < 3u; ++c) {
+                const double v = load.dof_values[base + 3u * b + c];
+                if (!std::isfinite(v)) throw std::runtime_error("non-finite strike coefficient");
+                node_norm2 += v * v;
+            }
+        }
+        const double weight = std::sqrt(node_norm2);
+        coefficient_norm2 += node_norm2;
+        weight_sum += weight;
         weighted_z += weight * model.mesh_si.outer_profile[i].z;
     }
-    if (!(out.integrated_weight > 0.0)) throw std::runtime_error("zero integrated contact weight");
-    out.centroid_z = weighted_z / out.integrated_weight;
+    out.coefficient_norm = std::sqrt(coefficient_norm2);
+    if (!(out.coefficient_norm > 0.0) || !(weight_sum > 0.0))
+        throw std::runtime_error("zero integrated contact coefficient norm");
+    out.centroid_z = weighted_z / weight_sum;
     return out;
 }
 }
@@ -68,14 +78,12 @@ int main() {
         const Metrics& fine = values.back();
         double previous_error = std::numeric_limits<double>::infinity();
         for (std::size_t i = 0; i < values.size(); ++i) {
-            const double norm_error = std::abs(values[i].integrated_weight - 1.0);
             const double centroid_error = std::abs(values[i].centroid_z - fine.centroid_z);
-            if (norm_error > 1.0e-12) throw std::runtime_error("contact weights are not normalized");
             if (i > 0 && centroid_error > previous_error * 1.25 + 1.0e-12)
                 throw std::runtime_error("contact centroid refinement is unstable");
             previous_error = centroid_error;
             std::cout << "width_m=" << width << " nodes=" << meshes[i]
-                      << " weight_sum=" << values[i].integrated_weight
+                      << "coefficient_norm=" << values[i].coefficient_norm
                       << " centroid_z_m=" << values[i].centroid_z
                       << " fine_centroid_error_m=" << centroid_error << '\n';
         }

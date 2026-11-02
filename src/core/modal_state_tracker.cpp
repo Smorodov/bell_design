@@ -64,14 +64,15 @@ bool makeShape(const ModalMode& mode, std::vector<double>& out,
     return true;
 }
 
-std::vector<int> unionHarmonics(const std::vector<int>& a, const std::vector<int>& b,
-                                const std::vector<int>& c, const std::vector<int>& d) {
+std::vector<int> commonHarmonics(const std::vector<int>& a, const std::vector<int>& b,
+                                 const std::vector<int>& c, const std::vector<int>& d) {
     std::vector<int> result;
-    const auto append = [&result](const std::vector<int>& values) {
-        for (int h : values)
-            if (std::find(result.begin(), result.end(), h) == result.end()) result.push_back(h);
-    };
-    append(a); append(b); append(c); append(d);
+    for (int h : a) {
+        if (std::find(b.begin(), b.end(), h) == b.end()) continue;
+        if (std::find(c.begin(), c.end(), h) == c.end()) continue;
+        if (std::find(d.begin(), d.end(), h) == d.end()) continue;
+        if (std::find(result.begin(), result.end(), h) == result.end()) result.push_back(h);
+    }
     return result;
 }
 
@@ -186,8 +187,9 @@ bool massWeightedFieldSimilarity(const ModalMode& a, const ModalMode& b, double&
         const std::size_t hb = static_cast<std::size_t>(it - b.fem_harmonics.begin());
         ++common;
         for (std::size_t n = 0; n < na; ++n) for (std::size_t c = 0; c < 3; ++c) {
-            const std::size_t ia = (n * ba + ha) * 3u + c;
-            const std::size_t ib = (n * bb + hb) * 3u + c;
+            // Direct cylindrical FEM stores [node][component][Fourier basis].
+            const std::size_t ia = (n * 3u + c) * ba + ha;
+            const std::size_t ib = (n * 3u + c) * bb + hb;
             const double wa = a.fem_mass_lumped_weights[ia];
             const double wb = b.fem_mass_lumped_weights[ib];
             const double w = std::sqrt(std::max(0.0, wa) * std::max(0.0, wb));
@@ -275,7 +277,11 @@ ModalStateTrackerReport ModalStateTracker::update(const ModalData& candidates,
             if (a == b || !valid[b]) continue;
             const double db = std::abs(std::log(candidates.modes[b].frequency_hz / pred[1].f));
             if (db > config_.maximum_log_frequency_error) continue;
-            const auto comparison_harmonics = unionHarmonics(
+            // Compare only the Fourier components present in both the tracked
+            // family and the candidate family.  A mesh/Fourier enrichment must
+            // not look like a physical branch change merely because the new
+            // basis contains additional (initially untracked) components.
+            const auto comparison_harmonics = commonHarmonics(
                 tracks_[0].harmonics, tracks_[1].harmonics,
                 shape_harmonics[a], shape_harmonics[b]);
             if (comparison_harmonics.empty()) continue;
@@ -284,8 +290,14 @@ ModalStateTrackerReport ModalStateTracker::update(const ModalData& candidates,
                 !alignShape(tracks_[1].shape, tracks_[1].harmonics, comparison_harmonics, tb) ||
                 !alignShape(shapes[a], shape_harmonics[a], comparison_harmonics, ca) ||
                 !alignShape(shapes[b], shape_harmonics[b], comparison_harmonics, cb)) continue;
+            ++report.frequency_compatible_assignments;
             const double pair_similarity = subspaceSimilarity(ta, tb, ca, cb);
-            if (pair_similarity < config_.minimum_subspace_similarity) continue;
+            if (pair_similarity < config_.minimum_subspace_similarity) {
+                ++report.subspace_rejected_assignments;
+                report.best_rejected_subspace_similarity = std::max(
+                    report.best_rejected_subspace_similarity, pair_similarity);
+                continue;
+            }
             const double fa = std::exp(-0.5 * da * da * pred[0].f * pred[0].f /
                                        (pred[0].sigma * pred[0].sigma));
             const double fb = std::exp(-0.5 * db * db * pred[1].f * pred[1].f /

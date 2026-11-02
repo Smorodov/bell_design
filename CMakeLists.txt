@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.16)
-project(BellOptimizer VERSION 1.2.96 LANGUAGES CXX)
+project(BellOptimizer VERSION 1.2.140 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -13,6 +13,7 @@ if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
 endif()
 
 option(BUILD_SMOKE_TESTS "Build validation and smoke tests" ON)
+option(BUILD_CHINESE_RESEARCH "Build detached Chinese-bell research module" OFF)
 set(CCX_EXECUTABLE "ccx" CACHE STRING "CalculiX executable used by the reference modal solver")
 
 if(NOT CMAKE_BUILD_TYPE)
@@ -24,6 +25,7 @@ set(BELL_CORE_SRC ${CMAKE_CURRENT_SOURCE_DIR}/src/core)
 
 add_library(bell_core STATIC
     src/core/bell_generator.cpp
+    src/core/bell_material.cpp
     src/core/bell_optimizer.cpp
     src/core/modal_tracking.cpp
     src/models/bell_model_profile.cpp
@@ -38,8 +40,12 @@ add_library(bell_core STATIC
     src/fem/cylindrical_modal_tracking.cpp
     src/fem/internal_modal_solver.cpp
     src/excitation/localized_strike.cpp
-    src/excitation/chinese_bell_strike.cpp
+    src/excitation/modal_impulse_response.cpp
+    src/excitation/hammer_contact.cpp
+    src/excitation/internal_clapper_geometry.cpp
+    src/excitation/clapper_dynamics.cpp
     src/excitation/meridional_influence.cpp
+    src/acoustics/acoustic_directional_field.cpp
     src/ccx/ccx_solver.cpp
     src/ccx/ccx_input_writer.cpp
 )
@@ -57,10 +63,12 @@ add_executable(bell
     src/commands/optimize.cpp
     src/commands/synthesize.cpp
     src/commands/synthesize_geometry.cpp
+    src/commands/synthesize_contact.cpp
     src/synthesis/bell_synthesis.cpp
 )
 target_include_directories(bell PRIVATE ${BELL_SRC} ${BELL_CORE_SRC} ${BELL_SRC}/synthesis)
 target_link_libraries(bell PRIVATE bell_core)
+target_compile_definitions(bell PRIVATE BELL_VERSION="${PROJECT_VERSION}")
 
 
 if(BUILD_SMOKE_TESTS)
@@ -70,7 +78,6 @@ if(BUILD_SMOKE_TESTS)
     add_library(bell_experimental STATIC
         src/core/modal_state_tracker.cpp
         src/fem/cylindrical_modal_field.cpp
-        src/excitation/chinese_bell_objective.cpp
     )
     add_library(bell_validation STATIC
         src/validation/nonaxisymmetric_reference.cpp
@@ -89,6 +96,9 @@ if(BUILD_SMOKE_TESTS)
     else()
         target_compile_options(bell_experimental PRIVATE -Wall -Wextra -Wpedantic)
     endif()
+
+    add_executable(cylindrical_axis_regularity_contract tests/cylindrical_axis_regularity_contract.cpp)
+    target_link_libraries(cylindrical_axis_regularity_contract PRIVATE bell_core)
 
     add_executable(direct_elliptical_fem_evaluation tests/direct_elliptical_fem_evaluation.cpp)
     target_link_libraries(direct_elliptical_fem_evaluation PRIVATE bell_core)
@@ -178,11 +188,20 @@ if(BUILD_SMOKE_TESTS)
     target_include_directories(acoustic_pressure_phase_contract PRIVATE ${BELL_SRC} ${BELL_CORE_SRC})
 
     add_executable(rotational_excitation_contract tests/rotational_excitation_contract.cpp)
+    add_executable(acoustic_directional_field_rotation_contract tests/acoustic_directional_field_rotation_contract.cpp)
+    target_include_directories(acoustic_directional_field_rotation_contract PRIVATE ${BELL_SRC} ${BELL_CORE_SRC})
+    target_link_libraries(acoustic_directional_field_rotation_contract PRIVATE bell_core)
     add_executable(excitation_model_audit tests/excitation_model_audit.cpp)
     add_executable(localized_strike_spectrum_audit tests/localized_strike_spectrum_audit.cpp)
     target_link_libraries(localized_strike_spectrum_audit PRIVATE bell_core)
     add_executable(localized_strike_direction_contract tests/localized_strike_direction_contract.cpp)
     target_link_libraries(localized_strike_direction_contract PRIVATE bell_core)
+    add_executable(circular_localized_strike_projection tests/circular_localized_strike_projection.cpp)
+    target_link_libraries(circular_localized_strike_projection PRIVATE bell_core)
+
+    add_executable(modal_impulse_response_contract tests/modal_impulse_response_contract.cpp)
+    target_link_libraries(modal_impulse_response_contract PRIVATE bell_core)
+    add_test(NAME modal_impulse_response_contract COMMAND modal_impulse_response_contract)
 
     add_executable(localized_strike_mesh_convergence tests/localized_strike_mesh_convergence.cpp)
     target_link_libraries(localized_strike_mesh_convergence PRIVATE bell_core)
@@ -204,6 +223,8 @@ if(BUILD_SMOKE_TESTS)
     target_link_libraries(thickness_mesh_convergence PRIVATE bell_core)
 
     add_executable(input_safety_contract tests/input_safety_contract.cpp)
+    add_executable(material_preset_contract tests/material_preset_contract.cpp)
+    target_link_libraries(material_preset_contract PRIVATE bell_core)
     target_link_libraries(input_safety_contract PRIVATE bell_core)
 
     add_executable(tradition_assessment tests/tradition_assessment.cpp)
@@ -299,9 +320,13 @@ if(BUILD_SMOKE_TESTS)
     add_test(NAME acoustic_pressure_phase_contract COMMAND acoustic_pressure_phase_contract)
     add_test(NAME acoustic_amplitude_contract COMMAND acoustic_amplitude_contract)
     add_test(NAME rotational_excitation_contract COMMAND rotational_excitation_contract)
+    add_test(NAME acoustic_directional_field_rotation_contract COMMAND acoustic_directional_field_rotation_contract)
     add_test(NAME excitation_model_audit COMMAND excitation_model_audit)
     add_test(NAME localized_strike_spectrum_audit COMMAND localized_strike_spectrum_audit)
     add_test(NAME localized_strike_direction_contract COMMAND localized_strike_direction_contract)
+    add_test(NAME circular_localized_strike_projection COMMAND circular_localized_strike_projection)
+    add_test(NAME cylindrical_axis_regularity_contract COMMAND cylindrical_axis_regularity_contract)
+    add_test(NAME direct_elliptical_fem_evaluation COMMAND direct_elliptical_fem_evaluation)
     add_test(NAME localized_strike_mesh_convergence COMMAND localized_strike_mesh_convergence)
     add_test(NAME inner_normal_offset_contract COMMAND inner_normal_offset_contract)
     add_test(NAME acoustic_multipole_audit COMMAND acoustic_multipole_audit)
@@ -311,6 +336,7 @@ if(BUILD_SMOKE_TESTS)
     add_test(NAME mesh_convergence COMMAND mesh_convergence "${CMAKE_BINARY_DIR}/mesh_convergence.csv")
     add_test(NAME thickness_mesh_convergence COMMAND thickness_mesh_convergence "${CMAKE_BINARY_DIR}/thickness_mesh_convergence.csv")
     add_test(NAME input_safety_contract COMMAND input_safety_contract)
+    add_test(NAME material_preset_contract COMMAND material_preset_contract)
     add_test(NAME tradition_assessment COMMAND tradition_assessment)
     add_test(NAME model_layer_contract COMMAND model_layer_contract)
     add_test(NAME modal_influence_contract COMMAND modal_influence_contract)
@@ -333,26 +359,33 @@ if(BUILD_SMOKE_TESTS)
     add_test(NAME cylindrical_harmonic_family_continuation COMMAND cylindrical_harmonic_family_continuation)
     add_test(NAME cylindrical_unified_ellipticity_audit COMMAND cylindrical_unified_ellipticity_audit)
     set_tests_properties(ccx_current_geometry_usage PROPERTIES WILL_FAIL TRUE)
+    add_executable(hammer_contact_contract tests/hammer_contact_contract.cpp)
+    target_link_libraries(hammer_contact_contract PRIVATE bell_core)
+    add_test(NAME hammer_contact_contract COMMAND hammer_contact_contract)
 
-    add_executable(chinese_bell_strike_selectivity tests/chinese_bell_strike_selectivity.cpp)
-    target_link_libraries(chinese_bell_strike_selectivity PRIVATE bell_core)
-    add_test(NAME chinese_bell_strike_selectivity COMMAND chinese_bell_strike_selectivity)
-    add_executable(chinese_bell_strike_surface_normal_contract tests/chinese_bell_strike_surface_normal_contract.cpp)
-    target_link_libraries(chinese_bell_strike_surface_normal_contract PRIVATE bell_core)
-    add_test(NAME chinese_bell_strike_surface_normal_contract COMMAND chinese_bell_strike_surface_normal_contract)
-    add_executable(chinese_bell_strike_position_search tests/chinese_bell_strike_position_search.cpp)
-    target_link_libraries(chinese_bell_strike_position_search PRIVATE bell_core)
-    add_test(NAME chinese_bell_strike_position_search COMMAND chinese_bell_strike_position_search)
-    add_executable(chinese_bell_strike_mesh_convergence tests/chinese_bell_strike_mesh_convergence.cpp)
-    target_link_libraries(chinese_bell_strike_mesh_convergence PRIVATE bell_core)
-    add_test(NAME chinese_bell_strike_mesh_convergence COMMAND chinese_bell_strike_mesh_convergence)
+    add_executable(internal_clapper_geometry_contract tests/internal_clapper_geometry_contract.cpp)
+    target_link_libraries(internal_clapper_geometry_contract PRIVATE bell_core)
+    add_test(NAME internal_clapper_geometry_contract COMMAND internal_clapper_geometry_contract)
 
-    add_executable(chinese_bell_strike_width_sensitivity tests/chinese_bell_strike_width_sensitivity.cpp)
-    target_link_libraries(chinese_bell_strike_width_sensitivity PRIVATE bell_core)
-    add_test(NAME chinese_bell_strike_width_sensitivity COMMAND chinese_bell_strike_width_sensitivity)
-    add_executable(chinese_bell_objective_contract tests/chinese_bell_objective_contract.cpp)
-    target_link_libraries(chinese_bell_objective_contract PRIVATE bell_experimental)
-    add_test(NAME chinese_bell_objective_contract COMMAND chinese_bell_objective_contract)
+    add_executable(inner_surface_modal_export_contract tests/inner_surface_modal_export_contract.cpp)
+    target_link_libraries(inner_surface_modal_export_contract PRIVATE bell_core)
+    add_test(NAME inner_surface_modal_export_contract COMMAND inner_surface_modal_export_contract)
+
+    add_executable(clapper_dynamics_contract tests/clapper_dynamics_contract.cpp)
+    target_link_libraries(clapper_dynamics_contract PRIVATE bell_core)
+    add_test(NAME clapper_dynamics_contract COMMAND clapper_dynamics_contract)
+    add_test(NAME contact_directional_audio_smoke COMMAND $<TARGET_FILE:bell> synth-contact
+        "${CMAKE_CURRENT_SOURCE_DIR}/bells/best_geometry.json"
+        --output "${CMAKE_BINARY_DIR}/contact_directional_smoke.wav"
+        --mesh-nodes 15 --duration 0.25 --contact-duration 0.02
+        --strike-azimuth-deg 37 --listener-polar-deg 25 --listener-azimuth-deg 80)
+    set_tests_properties(contact_directional_audio_smoke PROPERTIES TIMEOUT 120)
+    add_test(NAME internal_clapper_audio_smoke COMMAND $<TARGET_FILE:bell> synth-clapper
+        "${CMAKE_CURRENT_SOURCE_DIR}/bells/best_geometry.json"
+        --output "${CMAKE_BINARY_DIR}/internal_clapper_smoke.wav"
+        --mesh-nodes 15 --duration 0.25 --impact-horizon 0.25 --contact-step 0.000002)
+    set_tests_properties(internal_clapper_audio_smoke PROPERTIES TIMEOUT 180)
+
     add_executable(modal_state_tracker_contract tests/modal_state_tracker_contract.cpp)
     target_link_libraries(modal_state_tracker_contract PRIVATE bell_experimental)
     add_test(NAME modal_state_tracker_contract COMMAND modal_state_tracker_contract)
@@ -369,19 +402,26 @@ if(BUILD_SMOKE_TESTS)
     target_link_libraries(cylindrical_modal_field_fem_matrix PRIVATE bell_experimental)
     add_test(NAME cylindrical_modal_field_fem_matrix COMMAND cylindrical_modal_field_fem_matrix)
 
-    add_executable(chinese_bell_readiness_sweep tests/chinese_bell_readiness_sweep.cpp)
-    target_link_libraries(chinese_bell_readiness_sweep PRIVATE bell_core)
-    add_test(NAME chinese_bell_readiness_sweep COMMAND chinese_bell_readiness_sweep)
+    
 
 endif() # BUILD_SMOKE_TESTS
+
+if(BUILD_CHINESE_RESEARCH)
+    add_subdirectory(research/chinese_bell)
+endif()
 
 message(STATUS "")
 message(STATUS "BellOptimizer ${PROJECT_VERSION}")
 message(STATUS "  C++:             ${CMAKE_CXX_STANDARD}")
 message(STATUS "  Build type:      ${CMAKE_BUILD_TYPE}")
-message(STATUS "  CLI:             bell (optimize, synth, synth-geometry)")
+message(STATUS "  CLI:             bell (optimize, synth, synth-geometry, synth-contact, synth-clapper)")
 message(STATUS "  Smoke tests:     ${BUILD_SMOKE_TESTS}")
+message(STATUS "  Chinese research: ${BUILD_CHINESE_RESEARCH}")
 message(STATUS "  CCX executable:  ${CCX_EXECUTABLE}")
 message(STATUS "  External C++ libs: none")
 message(STATUS "")
+
+
+
+
 

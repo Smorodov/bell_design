@@ -10,5 +10,6 @@
     "seed": 0,
     "optimize_ellipticity": false,
     "ellipticity_min": 0.7,
-    "ellipticity_max": 1.0
+    "ellipticity_max": 1.0,
+    "material": "bell_bronze_reference"
 }

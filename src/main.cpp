@@ -1,11 +1,16 @@
 #include "commands/optimize.hpp"
 #include "commands/synthesize.hpp"
 #include "commands/synthesize_geometry.hpp"
+#include "commands/synthesize_contact.hpp"
 
 #include <iostream>
 #include <string>
 #include <vector>
 #include <filesystem>
+
+#ifndef BELL_VERSION
+#define BELL_VERSION "dev"
+#endif
 
 #ifdef _WIN32
 #include <windows.h>
@@ -15,10 +20,10 @@ namespace {
 
 void print_help() {
     std::cout
-        << "BellOptimizer 1.2.96\n\n"
+        << "BellOptimizer " << BELL_VERSION << "\n\n"
         << "Usage:\n"
         << "  bell optimize [--solver=ccx|internal]\n"
-        << "  bell synth [file.dat]\n  bell synth-geometry [geometry.json] [--ellipticity q] [--output file.wav]\n"
+        << "  bell synth [file.dat]\n  bell synth-geometry [geometry.json] [--ellipticity q] [--output file.wav]\n  bell synth-contact [geometry.json] [--output file.wav] [--strike-azimuth-deg deg] [--listener-polar-deg deg] [--listener-azimuth-deg deg]\n  bell synth-clapper [geometry.json] [--output file.wav] [--tip-radius m] [--tip-length m] [--initial-angular-velocity rad/s]\n"
         << "  bell --help\n"
         << "  bell --version\n"
         << "\n"
@@ -27,7 +32,7 @@ void print_help() {
         << "\n"
         << "Examples:\n"
         << "  bell optimize --solver=internal --workdir bells\n"
-        << "  bell synth best_bell.dat --workdir bells\n  bell synth-geometry best_geometry.json --ellipticity 0.85 --output bell_elliptic.wav --workdir bells\n";
+        << "  bell synth best_bell.dat --workdir bells\n  bell synth-geometry best_geometry.json --ellipticity 0.85 --output bell_elliptic.wav --workdir bells\n  bell synth-contact best_geometry.json --output audio\\bell_contact.wav --workdir .\n  bell synth-clapper best_geometry.json --output audio\\bell_clapper.wav --workdir .\n";
 }
 
 bool set_workdir(int argc, char** argv) {
@@ -74,7 +79,7 @@ int main(int argc, char** argv) {
         return 0;
     }
     if (command == "--version" || command == "-V" || command == "version") {
-        std::cout << "BellOptimizer 1.2.96\n";
+        std::cout << "BellOptimizer " << BELL_VERSION << "\n";
         return 0;
     }
 
@@ -87,6 +92,12 @@ int main(int argc, char** argv) {
     }
     if (command == "synth-geometry" || command == "synthesize-geometry") {
         return command_synthesize_geometry(argc - 1, argv + 1);
+    }
+    if (command == "synth-contact") {
+        return command_synthesize_contact(argc - 1, argv + 1);
+    }
+    if (command == "synth-clapper") {
+        return command_synthesize_clapper(argc - 1, argv + 1);
     }
     if (command == "synth" || command == "synthesize") {
         return command_synthesize(argc - 1, argv + 1);
