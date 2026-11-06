@@ -20,6 +20,7 @@ using State = std::vector<double>; // theta, angular velocity, then q/v pairs
 struct ContactEvaluation {
     double force = 0.0;
     double penetration = 0.0;
+    Point2D surface_point{};
     double generalized_torque = 0.0;
     std::vector<double> normal_shapes;
 };
@@ -85,6 +86,7 @@ struct System {
             return out;
         out.normal_shapes.resize(modes.size());
         const double u = modalNormalDisplacement(s, geom, &out.normal_shapes);
+        out.surface_point = geom.surface_point;
         out.penetration = std::max(0.0, u - geom.gap);
         if (!(out.penetration > 0.0)) return out;
         out.force = c.hertz_stiffness_n_per_m_1_5 * out.penetration * std::sqrt(out.penetration);
@@ -192,7 +194,12 @@ bool simulateInternalClapperContact(const ClapperDynamicsConfig& c,
         result.angle_history_rad.push_back(s[0]);
         result.peak_contact_force_n = std::max(result.peak_contact_force_n, ce.force);
         if (ce.force > 1.0e-8) {
-            if (!hadContact) { hadContact = true; result.first_contact_time_seconds = time; }
+            if (!hadContact) {
+                hadContact = true;
+                result.first_contact_time_seconds = time;
+                result.first_contact_surface_r_m = ce.surface_point.r;
+                result.first_contact_surface_z_m = ce.surface_point.z;
+            }
         } else if (hadContact && !separated) {
             separated = true;
             result.separation_time_seconds = time;

@@ -2,6 +2,7 @@
 // bell_synthesis.cpp - СИНТЕЗ ЗВУКА КОЛОКОЛА
 // =============================================================================
 #include "bell_synthesis.hpp"
+#include "../audio/wav_writer.hpp"
 #include <cmath>
 #include <algorithm>
 #include <numeric>
@@ -22,13 +23,6 @@ namespace BellOptimizer {
 // =========================================================================
 // ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ
 // =========================================================================
-
-static double smoothstep(double t, double a, double b) {
-    if (t <= a) return 0.0;
-    if (t >= b) return 1.0;
-    double x = (t - a) / (b - a);
-    return x * x * (3.0 - 2.0 * x);
-}
 
 // =========================================================================
 // GEOMETRYPARAMS
@@ -728,73 +722,14 @@ bool BellSynthesizer::save_wav(const std::string& filename) {
         std::cerr << "Error: no audio to save\n";
         return false;
     }
-    // RIFF chunk sizes are 32-bit; keep the legacy int header writes in range.
-    const size_t max_samples = static_cast<size_t>((std::numeric_limits<int>::max() - 36) / 2);
-    if (audio_.size() > max_samples) {
-        std::cerr << "Error: audio is too large for the supported RIFF/WAV size\n";
+    if (!Audio::writeMonoPcm16(filename, audio_, config_.sample_rate)) {
+        std::cerr << "Error: failed to write valid PCM16 WAV file " << filename << "\n";
         return false;
     }
-    
-    std::ofstream file(filename, std::ios::binary);
-    if (!file) {
-        std::cerr << "Error: failed to create file " << filename << "\n";
-        return false;
-    }
-    
-    std::vector<int16_t> pcm_audio(audio_.size());
-    for (size_t i = 0; i < audio_.size(); ++i) {
-        double sample = std::max(-1.0, std::min(1.0, audio_[i]));
-        pcm_audio[i] = static_cast<int16_t>(sample * 32767.0);
-    }
-    
-    int data_size = static_cast<int>(pcm_audio.size() * sizeof(int16_t));
-    write_wav_header(file, data_size);
-    file.write(reinterpret_cast<const char*>(pcm_audio.data()), data_size);
-    
-    if (!file.good()) {
-        std::cerr << "Error: write failed\n";
-        file.close();
-        return false;
-    }
-    
-    file.close();
+    const auto dataSize = audio_.size() * sizeof(std::int16_t);
     printf("   Saved: %s\n", filename.c_str());
-    printf("   Size: %d KB\n", data_size / 1024);
-    
+    printf("   Size: %zu KB\n", dataSize / 1024u);
     return true;
-}
-
-void BellSynthesizer::write_wav_header(std::ofstream& file, int data_size) const {
-    int sample_rate = config_.sample_rate;
-    int channels = 1;
-    int bits_per_sample = 16;
-    
-    int byte_rate = sample_rate * channels * bits_per_sample / 8;
-    int block_align = channels * bits_per_sample / 8;
-    int subchunk2_size = data_size;
-    int chunk_size = 36 + subchunk2_size;
-    
-    file.write("RIFF", 4);
-    file.write(reinterpret_cast<const char*>(&chunk_size), 4);
-    file.write("WAVE", 4);
-    file.write("fmt ", 4);
-    
-    int subchunk1_size = 16;
-    short audio_format = 1;
-    short num_channels = static_cast<short>(channels);
-    int sample_rate_int = sample_rate;
-    short bits_per_sample_short = static_cast<short>(bits_per_sample);
-    
-    file.write(reinterpret_cast<const char*>(&subchunk1_size), 4);
-    file.write(reinterpret_cast<const char*>(&audio_format), 2);
-    file.write(reinterpret_cast<const char*>(&num_channels), 2);
-    file.write(reinterpret_cast<const char*>(&sample_rate_int), 4);
-    file.write(reinterpret_cast<const char*>(&byte_rate), 4);
-    file.write(reinterpret_cast<const char*>(&block_align), 2);
-    file.write(reinterpret_cast<const char*>(&bits_per_sample_short), 2);
-    
-    file.write("data", 4);
-    file.write(reinterpret_cast<const char*>(&subchunk2_size), 4);
 }
 
 // =========================================================================

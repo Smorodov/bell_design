@@ -1,300 +1,175 @@
-# Acoustic field and stereo architecture audit — 1.2.132
+# Acoustic field and stereo — current engineering record
 
-## Scope
+## Status at 1.2.166
 
-This audit continues the 1.2.127 review with one stricter question:
+The `synth-clapper --stereo` workflow has a shared mechanical/modal history and two receiver evaluations. It is a useful geometric stereo listening prototype, not a calibrated acoustic prediction. The far-field receiver path remains the default; the finite-distance path remains opt-in.
 
-> Is the existing circular-bell production model sufficient to construct a spatial acoustic field that can later be rotated for stereo without recomputing the structural or acoustic solution?
+### Shared computation contract
 
-The answer is **no, not yet**. The missing part is more specific than a generic "field object": the production excitation/radiation path currently collapses the azimuthal degree of freedom before synthesis.
+For a given bell, clapper state and strike:
 
-The detached Chinese research module remains outside this audit and outside the production build.
+1. solve the structural modes once;
+2. simulate pendulum/contact once;
+3. derive one post-separation modal state and decay history;
+4. evaluate that same history at left and right receiver positions;
+5. encode the two channels.
 
-## 1. Current production acoustic contract
+Per-channel FEM, contact integration or modal time evolution is forbidden. Receiver geometry may change without altering the structural/contact result.
 
-The production synthesis path reconstructs each audible mode from a scalar signed coefficient
+### Receiver paths
 
-`C_m = -part_rz * Qd * omega`.
+**Far-field (default).** A complex azimuthal directional field is built per mode and sampled in the two receiver directions. This is the intended reusable representation for head rotation. It remains an approximate free-space radiation model.
 
-`part_rz` is the generalized meridional participation and `Qd` is the surface volume-displacement integral. The synthesis layer retains only magnitude plus a sign-derived phase of `0` or `pi`.
+**Finite-distance (opt-in).** An outer-shell Green-kernel surface integral is evaluated at the exact ear points. It is a comparative receiver kernel, not a complete exterior acoustic boundary-value solution. Its extra receiver integrals do not repeat FEM/contact/modal dynamics.
 
-This is a valid contract for the current monophonic scalar synthesis approximation. It is **not** a directional acoustic field.
+Neither path includes head diffraction, pinna/HRTF, torso scattering, room reflections or calibrated sound pressure level. WAVs are peak-normalized listening previews.
 
-The current production result therefore has no retained:
 
-- listener azimuth;
-- listener elevation;
-- complex directional transfer function;
-- azimuthal radiation coefficients;
-- phase versus observation angle;
-- channel-specific observation state.
+## 1.2.166 — shared far-field coefficient construction
 
-## 2. Stronger finding: circular symmetry alone does not create stereo information
+The former command-local direct azimuthal integral and Fourier/Bessel field builder have been moved into `src/acoustics/directional_radiation.*`. Production mono (`synth-contact`) and stereo/clapper far-field synthesis now call the same `buildDirectionalRadiationField` implementation. The direct azimuthal quadrature remains available as an independent reference evaluator and is no longer used in production rendering.
 
-A circular/axisymmetric structural mode with an axisymmetric excitation produces an axisymmetric acoustic field. In a harmonic representation this is the `m=0` component.
+A maintained equivalence contract compares complex values (therefore both amplitude and phase) for a synthetic modal surface field over 3 frequencies (320, 1873.25 and 4200 Hz), 3 listener polar angles (0.19, 0.71 and 1.31 rad), and 17 azimuths at each condition. With 8192 direct azimuth samples, the observed maximum relative complex difference was approximately `2.99e-14` (maximum absolute difference approximately `2.02e-18`). This is numerical agreement for the tested field and implementation conventions, not a physical accuracy claim.
 
-For `m=0`, rotation gives
+The harmonic builder is now the single production far-field path. The direct integral is retained only as a regression oracle so future changes to Fourier sign, phase convention or normalization cannot silently alter the rendered field. The finite-distance Green-kernel path remains separate because it represents a different receiver approximation.
 
-`exp(-i m theta) = 1`.
+## Consolidated numerical evidence
 
-Therefore rotating an exactly axisymmetric production field produces **no audible spatial change**.
+The following are reproducible engineering comparisons from the archived one-off audits. Raw WAV/CSV outputs have been removed from the source package; the values and scope are retained here and in `research/CONSOLIDATED_NUMERICAL_RESULTS.md`.
 
-This is a critical constraint. A future stereo implementation cannot obtain meaningful left/right angular variation merely by wrapping the current scalar modal coefficient in a rotation API.
+### 1.2.161 — real-FEM receiver comparison
 
-Meaningful rotation requires at least one of the following to be retained by the production model:
+- The comparison used a real cylindrical FEM solution, 13 modal components, two ears, listener distances 1/2/3/5 m and head orientations 0°/15°.
+- Global absolute complex difference normalized by the strongest modal transfer was approximately 1.18%.
+- Relative errors for individual weakly radiating modes could reach about 32%; these are sensitive to near-zero radiation denominators and must not be interpreted as the overall field error.
 
-1. a non-axisymmetric excitation field;
-2. a non-axisymmetric modal response;
-3. a directional radiation model that produces non-zero azimuthal orders.
 
-This does **not** imply reopening the Chinese-bell research. The same architectural requirement applies to a circular bell with a localized physical strike: the strike position must first be represented as an angular excitation, then projected onto the structural modes, then converted to an acoustic directional field.
+### 1.2.167 — coordinate covariance and no-copy field reuse
 
-## 3. What the existing vector FEM data can and cannot provide
+`AcousticDirectionalField::evaluateRotated(theta, frameRotation)` now evaluates a rotated coordinate frame directly from the original Fourier coefficients. It is algebraically equivalent to materializing `field.rotated(frameRotation)` and then evaluating the result, but does not copy or mutate the coefficient vector. This makes repeated receiver-angle queries independent of the number of head-yaw samples once a per-mode field has been built.
 
-`ModalMode` already has optional Fourier boundary samples and complete direct-vector-FEM modal data. Those arrays are useful structural representations.
+The rotation contract now checks: identity/full-turn behavior, the complex phase factor for each azimuthal order, coefficient-norm preservation, additive composition, joint source/listener coordinate covariance, equivalence of no-copy and materialized rotations over multiple angles, and immutability of the base field. These are algebraic tests of the harmonic representation. They do not yet prove that a rotated source, strike excitation, and receiver geometry are wired consistently through every production command.
 
-They do not automatically constitute an acoustic radiation field.
+The far-field stereo renderer already builds one field per mode and evaluates both ears from it; it does not rebuild FEM or the surface integral for the second ear. The new no-copy API extends this to repeated coordinate-frame queries. Exact finite-distance receiver evaluation remains separate. Physical head diffraction remains out of scope; ear-specific polar-angle interpolation is now implemented and has passed the real-FEM numerical contract described in 1.2.171.
 
-In particular:
+### 1.2.162 — complete stereo waveform comparison
 
-- a structural displacement coefficient is not a far-field pressure coefficient;
-- a Fourier displacement order is not by itself an acoustic radiation order;
-- storing cosine/sine structural components does not define listener distance, propagation phase, or radiation boundary conditions;
-- a scalar `Qd` obtained after azimuthal integration has already discarded non-zero angular information.
+Four matched 10-second, 48 kHz stereo previews were rendered from identical FEM/contact/modal release histories (0° and +15° head yaw; both receiver paths).
 
-Consequently the existing Fourier storage should be reused only as an input to a separately defined acoustic radiation layer, not relabelled as an acoustic field.
+- At 0° yaw, left/right channels matched to PCM quantization precision.
+- At +15° yaw, L/R correlations were 0.9259 (far-field) and 0.9441 (finite-distance).
+- Interaural propagation offset was 68.8 μs, approximately 3.30 samples at 48 kHz.
+- The finite-distance vs far-field waveform correlations after shared peak normalization were 0.9489 at 0° and 0.9569/0.9402 for left/right at +15°.
+- Band-level differences were measurable, but neither path has an independent physical reference that would justify declaring it more accurate.
 
-## 4. Minimal production representation
+### 1.2.163 — listener matrix
 
-The smallest representation that is compatible with the requested rotation architecture is a modal directional transfer function.
+A real-FEM comparison covered 27 configurations: distance 1/3/5 m, polar angle 0.45/0.82/1.20 rad, yaw 0°/15°/30°, both ears and 11 returned modes (594 receiver/mode samples).
 
-For each retained structural mode `k`, retain a complex coefficient per azimuthal order `m`:
+- Aggregate normalized complex L2 difference: **0.920958%**.
+- Maximum eligible per-mode/receiver relative difference: **11.49% at 1 m**, **3.78% at 3 m**, **2.33% at 5 m**.
+- Individual relative comparisons exclude far-field amplitudes below 0.1% of the strongest mode in the same configuration to avoid near-zero denominators.
 
-`H_k,m(r_obs, theta_obs) = A_k,m(r_obs) exp(i m theta_obs)`.
+These are differences between two approximate kernels, not physical error bounds. The matrix uses one representative bell, fixed 0.18 m ear spacing and idealized receivers.
 
-For a fixed observation radius and elevation this can be reduced to
+## Decisions
 
-`H_k,m = a_k,m + i b_k,m`.
+- Keep far-field as the default; finite-distance stays opt-in.
+- Do not claim physical superiority from this comparison alone.
+- Do not add HRTF/head diffraction or room acoustics until the free-field geometric layer has passed rotation-covariance and phase/time-convention tests.
+- Cache/reuse the immutable per-mode directional field for arbitrary receiver yaw; rotation must not rebuild the FEM solution or radiation field.
+- Preserve absolute phase through modal summation. Peak normalization is a listening-output convenience, not SPL calibration.
 
-A rotation by `theta` is then the pure post-processing operation
+## Remaining acceptance gates (current baseline 1.2.172)
 
-`H_k,m -> H_k,m exp(-i m theta)`.
+1. Stereo phase/time convention: verify interaural delay, modal complex phase and sample-rate conversion without double-counting propagation delay.
+2. Stereo listening validation: compare generated recordings with controlled measurements only after geometry, material, clapper and microphone placement are known.
 
-No structural solve is required. No acoustic re-solve is required if the directional coefficients have already been computed for the declared observation regime.
+The direct-vs-harmonic complex equivalence and coordinate/rotation contracts validate implementation consistency; they do not establish physical accuracy of the radiation approximation.
 
-The representation should remain independent of stereo channels:
+## 1.2.168 — joint source/strike/listener coordinate contract
 
-```text
-modal response
-      |
-      v
-base directional acoustic field
-      |
-      +---- R(theta_L) ---> left observation
-      |
-      +---- R(theta_R) ---> right observation
-```
+Added `stereo_coordinate_covariance_contract`. It rotates the listener centre and both idealized ear points about the bell axis while retaining range, polar angle, ear spacing, yaw relative to the local radial/tangential frame, and propagation delays. It also verifies that the strike-to-listener relative azimuth is unchanged when source, strike and listener coordinates receive the same global rotation. The complex left/right transfer is checked using the no-copy field-frame evaluation.
 
-## 5. Observation regime must be fixed before implementation
+This closes a stronger *geometry/representation* covariance gate than the isolated Fourier-field test. It is still not a production end-to-end clapper test: the current command does not expose a global bell/source orientation transform, and the test does not rerun contact dynamics under a rotated strike. In particular, FEM modal basis phase conventions and the mapping of `strike_azimuth_rad` into modal release coordinates still need a dedicated integration test before claiming full physical source/strike covariance.
 
-The phrase "acoustic field" is otherwise ambiguous. Before adding a production class, one observation regime must be selected.
+The current far-field stereo renderer samples an azimuth-only field built at the listener-centre polar angle. The two ears have slightly different polar angles at finite range. This is not guaranteed to be a small error: the 1.2.169 synthetic multi-harmonic audit measures the effect explicitly below. A true far-field 3D solution requires polar-angle dependence (for example a spherical-harmonic representation or validated interpolation over polar angle), not merely an azimuthal rotation. The finite-distance receiver path evaluates each ear point independently, but it remains a separate approximate kernel.
 
-### Option A — far-field directional response
 
-Retain only the angular radiation transfer at a declared distance/asymptotic regime.
+## 1.2.169 — clapper/modal covariance and ear polar-angle error
 
-Advantages:
+### End-to-end clapper/modal frame covariance
 
-- smallest representation;
-- rotation is exact in harmonic space;
-- no spatial grid is required;
-- cheap stereo rendering.
+Added `clapper_stereo_frame_covariance_contract`. It constructs an exactly degenerate cosine/sine modal pair, applies an orthogonal rotation to the real Fourier modal basis, rotates `strike_azimuth_rad` by the same angle, and runs the production `simulateInternalClapperContact` integrator for both frames. The test compares first-contact and separation times, peak force, contact point, the complete contact-force history, and modal displacement/velocity at release. It then builds the corresponding production Fourier/Bessel radiation fields and compares the complex modal pressure after rotating the listener azimuth.
 
-This is the preferred first production target if the application only needs stereo orientation rather than arbitrary near-field acoustics.
+This verifies the contact-to-release-to-radiation coordinate contract for an exactly degenerate harmonic pair and the actual clapper dynamics implementation. It does not prove covariance for arbitrary non-degenerate FEM modes, a non-axisymmetric bell geometry, or arbitrary eigensolver basis mixing. In particular, a rotated pair is physically admissible as a basis change only within a degenerate (or numerically unresolved) modal subspace.
 
-### Option B — near-field field
+### Ear polar-angle approximation measurement
 
-Retain pressure/velocity over a spatial observation surface or volume.
+Added `stereo_polar_angle_approximation_contract`. It compares (a) the production shortcut that evaluates both ears using the listener-centre polar angle against (b) direct azimuthal quadrature evaluated at each ear's own polar/azimuth angles. The polar-specific Fourier/Bessel builder is independently checked against direct quadrature at each ear.
 
-This is substantially larger and requires a propagation/radiation model with an explicit validity domain. It should not be introduced merely to support stereo.
+For the documented synthetic multi-harmonic fixture (640 Hz, 0.18 m ear spacing, centre polar angle 0.83 rad, fixed yaw and azimuth), the maximum absolute complex error normalized by the strongest direct ear response in the distance sweep was:
 
-**Decision:** do not implement Option B for the current stereo objective.
+| Listener distance | Centre-polar approximation error / reference peak |
+|---:|---:|
+| 0.75 m | 61.22% |
+| 1.5 m | 29.30% |
+| 3.0 m | 14.20% |
+| 6.0 m | 6.97% |
 
-## 6. Excitation contract required for a circular bell
+For this fixture the polar-specific Fourier/Bessel result agreed with direct quadrature to approximately `1.5e-14`–`1.7e-14` of the reference peak. These figures isolate the polar-angle shortcut; they are not a universal bound for real bells and depend on frequency, bell size, modal harmonics, receiver direction and head geometry. The observed error is large enough that the centre-polar shortcut must not be presented as generally accurate for ordinary listening distances.
 
-The current meridional influence is axisymmetric. A localized strike must therefore enter as a separate angular excitation contract.
+**Implementation decision:** do not silently change the production renderer in this audit. Keep the current shortcut explicitly labelled as an approximation until a polar-dependent far-field representation is implemented and validated against direct per-ear evaluation on real FEM modes. The next implementation gate is a 3D polar/azimuth field or a controlled polar interpolation with quantified error and a listener-only update path that reuses the modal/contact history.
 
-Conceptually:
 
-`strike(theta,z) -> generalized modal coefficient q_k -> acoustic directional coefficients H_k,m`.
+## 1.2.170 — polar-dependent far-field stereo field
 
-The strike representation must preserve its angular phase. If the same physical strike is rotated by `theta_s`, its angular coefficients transform as
+The far-field stereo path no longer samples both ears from one field built at the listener-centre polar angle. For each retained mode the production command builds `AcousticPolarDirectionalField` over the local polar interval covering all supported head-yaw values (-90 to +90 degrees), with no more than 2 degrees between nodes. Each node stores the existing complex azimuthal Fourier/Bessel field. A receiver query linearly interpolates the complex field value between adjacent polar nodes and then evaluates the requested azimuth; equivalently, the complex coefficients can be interpolated because the azimuthal basis/order set is shared across nodes. A global 91-node 0..pi grid remains available for standalone validation. This preserves phase information and makes azimuth a phase-only query, while head yaw changes the ear polar/azimuth query within the precomputed envelope; no surface integral is rebuilt.
 
-`S_m(theta_s) = S_m(0) exp(-i m theta_s)`.
+The stereo command builds this polar family once per mode and reuses it for both ears. FEM, clapper contact, modal release, and time-domain modal evolution remain shared and are not repeated per channel. Mono keeps the previous single-polar builder. The finite-distance path remains an opt-in direct receiver-point kernel and is unchanged.
 
-This is the property that makes repeated stereo/strike orientations cheap.
+The new `polar_directional_field_interpolation_contract` compares interpolated results with independently built exact-polar Fourier/Bessel fields at 8 polar angles and 5 azimuths (40 complex comparisons). For its synthetic multi-harmonic fixture, the maximum interpolation error is 0.442% of the largest reference magnitude. The test also checks that polar interpolation commutes with azimuthal frame rotation. This is a regression contract for the interpolation implementation, not a universal acoustic accuracy bound. Further validation must use real FEM modal fields, several frequencies and geometries, and mesh/profile refinement. The local production grid typically needs only 2–4 surface-integral builds per mode at ordinary listening distances. The synthetic contract checks five yaw values across four receiver distances plus intermediate polar queries; the observed maximum is 0.365% of the fixture reference peak. The global 91-node grid is retained as a reference for interpolation tests, not used by the production renderer.
 
-The structural solve may be reused when the bell geometry is unchanged; only the modal excitation coefficients need to be rotated/recombined according to the declared linear model.
 
-No production code should assume that an axisymmetric generalized force can reproduce this behavior.
 
-## 7. Reference-frame contract
+## 1.2.171 — real-FEM polar interpolation validation
 
-The 1.2.127 audit found that `part_rz` and the acoustic first moment do not currently expose one shared explicit origin convention.
+Added `real_fem_polar_interpolation_contract`. Unlike the synthetic 1.2.170 fixture, this test obtains modal surface fields from the production cylindrical FEM modal evaluator and checks the production local polar interpolation against independently rebuilt exact-polar Fourier/Bessel fields. It covers three FEM cases: the baseline profile at 17 nodes, the same profile refined to 25 nodes, and a second bell profile at 17 nodes. Across the cases it exercised 54 returned modes spanning 79.55–735.10 Hz, 1/3/5 m receiver distances, five head-yaw values from -90 to +90 degrees, both ears, and 1,620 complex receiver/mode comparisons. There were also 162 independent direct-azimuthal-quadrature spot checks.
 
-This remains a gate.
+Worst per-mode peak-normalized complex interpolation error was `0.000118175` (0.01182%); maximum phase error was `0.00126688` degrees where the exact reference magnitude was at least 10% of that mode's directional peak. Both are below the predeclared gates of 1% complex error and 1 degree phase error. Exact-polar Fourier/Bessel values agreed with the independent direct quadrature to relative error below `2e-5` in all spot checks. These are numerical representation/interpolation results on the tested FEM profiles and mesh levels; they do not validate the far-field physical radiation approximation, exterior boundary conditions, HRTF, room acoustics, or measured sound pressure. The profile variation is a second representative test geometry, not an exhaustive shape family.
 
-Before a new directional acoustic field is introduced, the production documentation and code must identify:
+**Decision:** retain the linear complex interpolation and 2-degree maximum polar spacing. No tighter grid or higher-order interpolation is justified by these measured cases. The next gate is a reusable receiver-query API that separates listener orientation from the prepared modal/polar state; this was implemented and validated in 1.2.172.
 
-- structural excitation origin;
-- acoustic reference origin;
-- listener coordinate origin;
-- positive azimuth direction;
-- positive rotation direction;
-- phase convention.
 
-The current scalar synthesis coefficient must not be silently reinterpreted as a physically calibrated pressure field until this contract is explicit.
+## 1.2.172 — reusable prepared stereo receiver state
 
-## 8. Production design decision
+Added `PreparedStereoRadiation`, an immutable far-field receiver-query object. Its preparation step accepts already computed modal surface fields and the bell profile, builds one local polar family per supplied mode over a declared head-yaw envelope, and records the polar-family build count. Repeated `query(headYaw, centreAzimuthOffset)` calls calculate the idealized ear geometry and evaluate left/right complex transfers, range scales and propagation delays. Both head yaw and centre azimuth can change within the prepared polar envelope without rebuilding the field family. They do not have access to the FEM solver, clapper integrator or modal-release calculation; those remain upstream inputs and are not part of the receiver-query operation. Out-of-envelope yaw is rejected rather than silently extrapolated.
 
-Do **not** add a generic `rotate_stereo()` function to `BellSynthesizer` yet.
+The production `synth-clapper --stereo` far-field path now prepares this object after the FEM solve, clapper contact and modal release, then queries it for the requested yaw. The object is also reusable by a longer-lived host that wants to change listener yaw repeatedly without rerunning the upstream simulation. The current CLI still performs one render/query per process invocation; it is not an interactive listener-positioning UI and does not persist a cache between separate invocations. Finite-distance and mono branches remain separate.
 
-That would make the API look complete while the physical field is still absent.
+`real_fem_polar_interpolation_contract` now also exercises the reusable object for all three real-FEM cases. It makes five yaw values (-90, -45, 0, 45, 90 degrees) at three centre-azimuth offsets (0, +0.37, -1.1 rad), compares both ears with independently rebuilt exact-polar fields, checks finite range/delay values, verifies the prepared mode count remains stable, verifies the polar-field build count is unchanged after every query, and requires rejection outside the declared yaw envelope. The existing interpolation gates remain 1% peak-normalized complex error and 1 degree phase error above 10% modal peak.
 
-Instead implement the following in order:
+This closes the **receiver-query reuse API** gate. It did not by itself provide persistent cross-process caching or measured physical-acoustic accuracy. The phase/time gate was subsequently closed in 1.2.173; see the next section.
 
-1. define a compact `AcousticDirectionalField` contract;
-2. define the far-field observation convention;
-3. define the non-axisymmetric excitation input needed to populate it;
-4. construct the field once from modal response and radiation coefficients;
-5. validate harmonic rotation mathematically;
-6. only then connect two rotated observations to stereo synthesis.
+## 1.2.173 — reusable geometry-dependent acoustic field cache and phase/time kernel
 
-The field object must be immutable from the point of view of channel rendering: left/right rotations operate on copies or returned values and never mutate the shared base field.
+Added a versioned binary `AcousticFieldCache` artifact. It stores per-mode frequency and the complex Fourier/Bessel directional radiation coefficients on a canonical full polar grid (0..pi). It deliberately excludes excitation-dependent quantities: clapper/hammer force, contact trajectory/history, modal displacement and velocity at release, T60/decay choice, listener ear geometry and PCM samples. A single field cache can therefore be reused for multiple strikes, clapper settings, strike energies, listener distances, centre directions and head-yaw values, provided the bell geometry, material preset and FEM/modal solver configuration are identical.
 
-## 9. Mathematical validation gates
+The cache identity has three required caller-supplied fingerprints: canonical geometry, material preset and FEM/modal solver and radiation-model configuration (including sound-speed/radiation constants). Loading rejects identity mismatches. The file uses an explicit little-endian encoding, a format version, bounded dimensions/strings/payload, finite-value and structural validation, and an FNV-1a corruption checksum. This checksum detects accidental corruption; it is not a cryptographic authenticity mechanism. The `prepareStereoRadiationFromCache` path builds a receiver-query object without rebuilding any radiation surface integral. The cache is currently a library API, not yet wired into CLI flags or an automatic persistent cache manager. Callers must generate stable fingerprints correctly; a wrong fingerprint can defeat cache invalidation.
 
-The rotation layer must pass these independent contracts before it is connected to audio:
+The canonical full-sphere grid costs more to build and store than the local 2-degree yaw envelope used by one-shot CLI synthesis. This is intentional for a reusable asset that must cover arbitrary receiver positions. The default 91-node grid is a starting policy, not a universal accuracy guarantee; future cache production should carry an interpolation-quality report and permit a denser grid when a geometry/frequency family requires it. Far-field field coefficients are not a BEM/HRTF/room model and the cache does not improve that physical approximation.
 
-- `R(0)F = F`;
-- `R(2*pi)F = F`;
-- `R(a)R(b)F = R(a+b)F`;
-- for isolated order `m`, phase shift is exactly `-m*theta`;
-- real cosine/sine evaluation agrees with complex harmonic rotation;
-- rotation preserves coefficient norm/energy;
-- rotating one channel does not mutate the other channel or the stored base field;
-- changing only stereo angle does not invoke FEM or radiation-field construction.
+Added `stereo_phase_delay_contract` and factored modal pressure evaluation into `Audio::evaluateModalPressureAt`, now used by mono and stereo production synthesis. The signed propagation delay relative to the listener-centre reference is applied exactly once as `t - releaseTime - earDelay` (an ear closer than the centre has a negative relative delay); no additional `exp(-i*omega*delay)` multiplier is applied. The complex directional transfer retains the modal radiation phase, while path length is represented as a time shift. Ear range scaling remains a separate amplitude factor. The contract checks geometric left/right delays, ITD, onset causality, and equivalence to a pure once-only time shift. PCM onset is quantized to the sample grid, so the residual ITD quantization is bounded by one sample.
 
-These gates validate the representation and operation, not the physical radiation model.
+The cache contract performs a binary round-trip, verifies that the same field can be prepared for three distinct listener configurations and five yaw values without any new surface integrations, and rejects wrong geometry identity and checksum corruption. The test uses a controlled synthetic modal fixture; real-FEM cache-file size/performance and cross-platform compiler interoperability remain follow-up validation items.
 
-## 10. Current status
+## Reusable bell modal profile (1.2.174)
 
-**Production acoustic field:** PROVISIONAL / not implemented.
+A reusable profile now separates geometry/material/solver-dependent data from strike-dependent state. The logical bundle consists of two versioned, checksummed files:
 
-**Stereo rotation:** NOT IMPLEMENTED.
+- `.bmodal`: inner and outer meridional profiles; modal number, eigenvalue, frequency, modal mass and decay-time metadata; inner and outer Fourier boundary traces (radial, azimuthal and axial components plus harmonic labels).
+- `.acfield`: per-mode complex directional radiation fields on the canonical polar grid, using the existing acoustic-field cache format.
 
-**Current scalar modal synthesis:** retained unchanged.
+The bundle is bound to caller-supplied geometry, material-preset and FEM/modal-solver fingerprints. Loading rejects identity mismatches, truncation, checksum errors, inconsistent mode counts and frequency mismatches. The bundle deliberately excludes impact force/energy, clapper trajectory, contact history, modal release coordinates, T60 overrides and PCM output.
 
-**Chinese research:** frozen and isolated.
-
-**Next implementation target:** impact time history and complex modal response, followed by a validated non-axisymmetric radiation mapping. The direct vector-FEM path remains diagnostic.
-
-No acoustic threshold is promoted to a production acceptance gate by this document.
-
-## 10. 1.2.129 contract implementation
-
-The first minimal representation is now implemented as `AcousticDirectionalField`. It stores a declared observation condition plus complex coefficients for non-negative azimuthal orders. It provides two operations only:
-
-- `evaluate(theta)` evaluates the retained harmonic field;
-- `rotated(theta0)` returns the same base field expressed after an azimuthal rotation using `exp(-i*m*theta0)`.
-
-The class is deliberately not populated by the current scalar acoustic solver. This keeps the mathematical rotation mechanism available without pretending that the existing `Qd/part_rz` coefficient contains directional information.
-
-The production gate remains blocked until a radiation layer defines how FEM displacement and excitation produce the complex coefficients.
-
-### Rotation invariants now automated
-
-The contract test verifies:
-
-- `R(0)F = F`;
-- `R(2*pi)F = F`;
-- `R(theta0)F(theta) = F(theta-theta0)`;
-- `m=0` is rotation invariant;
-- every coefficient magnitude is preserved by rotation.
-
-These are mathematical representation tests, not acoustic validation.
-
-## 11. 1.2.130 localized-strike audit
-
-A direct audit of `src/excitation/localized_strike.*` establishes that the current localized strike is uniform in azimuth. Its spatial weight depends on meridional `z` and its surface integration uses the full ring factor `2*pi*r*ds`. The API has no strike azimuth and projects only the axisymmetric `outer_surface_radial/axial` boundary arrays.
-
-Therefore this module cannot populate non-zero acoustic azimuthal orders for the circular production path. It must not be reused as if it were a point strike merely because its name says `localized`.
-
-`ModalMode` already contains optional direct-vector-FEM Fourier boundary samples. These are the appropriate structural data to reuse when a physically defined circular strike projection is introduced. They remain structural data and are not themselves acoustic radiation coefficients.
-
-The structural projection step is now implemented in 1.2.131 as `modalImpulseCircular()`. It accepts strike azimuth and physical meridional/circumferential 1-sigma widths, projects the periodized-Gaussian angular load analytically onto the retained cosine/sine Fourier basis, and returns signed real generalized impulse factors. The default circular optimizer is not yet wired to the direct vector-FEM path, and the projection is not a complex modal response or an acoustic radiation model. See `docs/LOCALIZED_STRIKE_AZIMUTHAL_AUDIT.md` for equations and tests.
-
-The next gate is contact/mesh convergence, followed by a declared impact time history and non-axisymmetric acoustic radiation mapping.
-
-
-## 12. 1.2.131 circular strike projection
-
-`modalImpulseCircular()` now provides the first structural input capable of retaining strike azimuth on a circular bell. It reuses the direct vector-FEM Fourier boundary samples already stored in `ModalMode`; it does not add a new FEM formulation. The projection has an analytic periodized-Gaussian angular integral and no angular quadrature. A unit test verifies the cosine/sine rotation law and `m=0` invariance, and an integration test evaluates an exactly circular (`q=1`) model through the existing direct vector FEM evaluator before applying the projection.
-
-This does not close the directional-acoustics gate. The default circular optimizer still uses the axisymmetric `InternalModalSolver`, and the new projection returns real signed generalized impulse factors only. Impact phase/time history and radiation coefficients are still missing. The structural Fourier field must not be treated as an acoustic field.
-
-
-## 13. 1.2.132 direct-FEM Fourier layout correction
-
-The 1.2.131 circular-FEM integration test showed that Fourier boundary arrays existed, but a deeper covariance reconstruction revealed a DOF-layout defect. The element/global assembly order is `[node][component][Fourier basis]`, while the evaluator had read selected entries using `[node][basis][component]`. This corrupted exported structural fields and the generalized-influence projection. The full-field diagnostic tracker also used an inconsistent indexing expression when matching different Fourier basis counts.
-
-Both paths now use the assembly layout. The regression reconstructs the complete returned outer-wall modal response and checks that changing strike azimuth rotates the field spatially. For the tested circular `q=1` model and provisional 16-mode window, the relative covariance error was at most `1.44e-4` over profile meshes `nNodes=15,23,31`. This validates the structural rotation law for that tested configuration only. The lowest pair frequency still changes about `14.9%` between the coarsest and finest mesh, so modal frequency convergence is not established. Contact-width convergence, axis regularity derivation, complex impact response and radiation mapping remain open.
-
-## 14. 1.2.134 exact axis regularity follow-on
-
-The direct vector-FEM modal path now uses exact axis constraint elimination. The Cartesian smoothness conditions for the real `m=1` Fourier traces are `ur(1c)+uphi(1s)=0` and `ur(1s)-uphi(1c)=0`; the earlier audit's displayed signs were corrected. The evaluator retains six free-body rigid modes plus one complete pair in its internal solve window, then returns the requested number of physical modes after the minimum-frequency filter.
-
-On the 15/23/31-node circular strike diagnostic, the retained lowest-pair frequency changed by -2.25%, while the rotation-covariance error remained below `9.11e-5`. The lowest-pair generalized-force power still changed by -32.6%, so contact/mesh convergence is not closed. These results validate structural rotation covariance for the tested model/window only.
-
-The next physical task is now impact time history and complex modal response, followed by a separately derived non-axisymmetric radiation mapping. Structural Fourier displacement coefficients must not be relabelled as acoustic radiation coefficients. No change is made to default synthesis or stereo rendering.
-
-
-## 1.2.135 modal response handoff
-
-A standalone linear impulse-response evaluator now maps signed generalized
-modal impulses to damped modal displacement histories. It is deliberately
-downstream of structural projection and upstream of acoustic radiation. The
-current implementation uses an ideal impulse and a per-mode T60; it does not
-yet represent finite hammer contact or create directional pressure. It does
-not populate `AcousticDirectionalField` and does not change stereo status.
-
-## 1.2.136 conservative hammer-contact handoff
-
-`src/excitation/hammer_contact.*` now computes a finite-duration unilateral
-Hertz contact between a freely moving striker and a supplied set of linear
-structural modes. It retains a force time history and modal displacement
-histories, with a total-energy audit. The implementation is conservative and
-uses fixed-step RK4; it is not a calibrated hammer, does not include contact
-losses, and does not generate acoustic radiation coefficients. The test
-contract checks non-negative contact force, finite contact duration, striker
-impulse balance and energy conservation under time-step refinement.
-
-This new mechanical layer is not connected to the production audio path. The
-modal point-shape values and modal normalization must be supplied consistently.
-The structural contact/mesh sensitivity identified in 1.2.134 is still open;
-this time-integration test does not resolve it. `AcousticDirectionalField`
-remains unpopulated by production synthesis and stereo remains unimplemented.
-
-
-## 1.2.137 contact-driven mono listening path
-
-The new `synth-contact` path uses the axisymmetric modal volume-displacement coefficient already computed by the FEM solver and evaluates a monopole pressure proxy proportional to modal volume acceleration. It is sufficient to produce a repeatable mono listening file, but it does not populate `AcousticDirectionalField`, provide azimuthal directivity, or unblock stereo. The sound file is peak-normalized, not an absolute pressure prediction.
-
-
-## 1.2.138 directional mono radiation handoff
-
-The opt-in `synth-contact` command now derives a complex far-field transfer coefficient for each retained structural mode by integrating its normal surface displacement over the outer wall with the acoustic phase factor `exp(-i k n·x)`. The structural modal field is solved with real Fourier harmonics m=0..3, and the strike point is evaluated at a configurable azimuth before Hertz contact integration. The listener direction is configurable by polar angle from the bell axis and azimuth.
-
-The complex transfer coefficient is applied to the analytic modal acceleration, preserving the phase shift associated with the listener direction. This is the first production-path use of directional acoustic phase, but it is still a mono point-listener preview. The integration is a first-order far-field approximation with no calibrated radiation constant, measured material loss, room transfer, or BEM acoustic boundary solution. It does not yet populate the reusable `AcousticDirectionalField` data structure and does not implement stereo channel rotation.
-
-The circular rotational covariance check gives 0.9999999985 waveform correlation when strike and listener azimuth are rotated together by 90 degrees. This supports the coordinate convention, not absolute acoustic accuracy. Spectral mesh convergence and contact-force convergence remain separate gates.
+This is a boundary-modal synthesis profile, **not** a complete FEM restart: stiffness/mass matrices, interior eigenvectors and optimizer state are not serialized. It is sufficient to reconstruct the boundary `ModalMode` data consumed by the current clapper-contact and directional-radiation paths, provided the caller also supplies the matching profile identity and chooses new strike parameters. A real-FEM round-trip was added to `real_fem_polar_interpolation_contract`: four actual modes from the 17-node baseline case are serialized and restored, and the inner/outer Fourier boundary traces are compared exactly. The restored radiation half can prepare a receiver without rebuilding surface integrals. The CLI has not yet been switched to load this bundle; integration into the fast synthesis command is a separate next step. The two-file bundle is a logical pair rather than a single atomic filesystem transaction; applications should keep both files together and treat a missing half as an invalid profile.

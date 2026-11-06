@@ -12,6 +12,11 @@ struct BellMaterialPreset {
     const char* id;
     const char* description;
     BellMaterial material;
+    // Structural loss factor (approximately 2*zeta for light damping).
+    // A value is provided only when supported by bell-bronze measurements.
+    double structural_loss_factor;
+    bool has_structural_loss_factor;
+    const char* damping_source;
 };
 
 // Material properties are the mechanical inputs used by BellOptimizer.

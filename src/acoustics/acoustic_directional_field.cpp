@@ -11,10 +11,10 @@ constexpr double kTwoPi = 2.0 * kPi;
 
 bool AcousticDirectionalField::valid() const {
     if (!(std::isfinite(observation_radius_m) && observation_radius_m > 0.0)) return false;
-    if (!std::isfinite(observation_elevation_rad)) return false;
+    if (!std::isfinite(observation_polar_rad)) return false;
     if (orders.size() != coefficients.size() || orders.empty()) return false;
     for (std::size_t i = 0; i < orders.size(); ++i) {
-        if (orders[i] < 0 || !std::isfinite(coefficients[i].real()) ||
+        if (!std::isfinite(coefficients[i].real()) ||
             !std::isfinite(coefficients[i].imag())) return false;
         if (i > 0 && orders[i] <= orders[i - 1]) return false;
     }
@@ -45,6 +45,15 @@ std::complex<double> AcousticDirectionalField::evaluate(double theta_rad) const 
         value += coefficients[i] * std::polar(1.0, phase);
     }
     return value;
+}
+
+std::complex<double> AcousticDirectionalField::evaluateRotated(
+    double theta_rad, double frameRotation_rad) const {
+    if (!std::isfinite(frameRotation_rad))
+        throw std::invalid_argument("invalid acoustic field frame rotation");
+    // A rotated field has coefficients c_m exp(-i m alpha), hence its value
+    // at theta is exactly the base field evaluated at theta-alpha.
+    return evaluate(theta_rad - std::remainder(frameRotation_rad, kTwoPi));
 }
 
 } // namespace BellOptimizer::Acoustics

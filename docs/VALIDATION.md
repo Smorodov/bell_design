@@ -1,95 +1,136 @@
-# Validation and evidence
+# Validation and evidence — 1.2.172
 
 ## Build contract
 
-The supported release build is C++17 with no third-party C++ libraries. `build.cmd` configures and builds the project; `test.cmd`/`ctest` execute the registered tests. CalculiX is optional and is used only as an external differential reference.
+C++17, standard library only for the normal application. CalculiX is optional. Configure with `BUILD_SMOKE_TESTS=ON` for test executables and CTest registration. `BUILD_CHINESE_RESEARCH=OFF` is the default.
 
-## Validation layers
+## Maintained test groups
 
-### Geometry and mesh
+- **Core/domain:** input safety, material presets, geometry/profile, model-layer separation and castability.
+- **Sparse/modal solver:** sparse matrix/eigensolver contracts, eigenpair integrity, solver robustness/scaling, cylindrical Q4 assembly, axis regularity and modal subspace comparison.
+- **Excitation/contact:** localized strike, inner-surface modal export, hammer/clapper geometry, pendulum/contact energy, modal release and decay.
+- **Acoustics/stereo:** pressure scaling/phase, directional-field rotation, listener geometry, finite-distance radiation and real-FEM receiver integration.
+- **End-to-end:** CLI audio smoke tests and selected geometry/mesh convergence checks.
+- **Diagnostic continuation:** modal state tracker and cross-mesh field comparison remain test-only and are not part of the optimizer.
 
-- profile generation and spline convergence;
-- thickness and mesh convergence;
-- castability and geometry-path contracts;
-- input-safety and model-layer contracts.
+The three one-shot 1.2.160–1.2.163 result-generating audit tests were removed after their results were consolidated into maintained analysis documents. Their conclusions are not promoted into physical acceptance criteria.
 
-### Axisymmetric modal solver
+## 1.2.164 cleanup validation
 
-- eigenpair integrity;
-- generalized residual and M-orthogonality checks;
-- sparse solver scaling/robustness;
-- modal objective convergence.
+- All CMake targets built successfully with GCC 14.2, Linux, Release, C++17, `BUILD_SMOKE_TESTS=ON`, `BUILD_CHINESE_RESEARCH=OFF`.
+- 85 CTest cases are registered after removing three one-shot result-generating audits.
+- Focused core/FEM/contact/acoustic group: 24/24 passed.
+- End-to-end contact/clapper audio and diagnostic modal-tracking group: 6/6 passed.
+- A final focused re-run of the core smoke, finite-distance, clapper and modal continuation cases passed 10/10. This batch overlaps the two groups above; do not add the batch counts as unique tests.
+- Full 85-test CTest suite was not run; do not infer full-suite status from the focused groups.
+- Windows/MSVC was not tested.
 
-### Cylindrical vector FEM
+## Evidence semantics
 
-- Q4 strain/assembly contracts;
-- global modal solve and ellipticity convergence;
-- cylindrical geometry path and reference-mesh contracts;
-- cross-mesh/full-field modal comparison.
+A passing numerical contract establishes only its tested property. It does not imply physical calibration, historical authenticity, correct absolute SPL or agreement with a real bell recording. The finite-distance and far-field kernels remain approximate.
 
-### Modal identity
+## Chinese-bell status
 
-- mass-weighted overlaps and principal-angle subspaces;
-- conservative ambiguity handling;
-- modal-family continuation;
-- diagnostic state tracker with Kalman frequency prediction.
+The module is detached and default-off. Structural solver contracts are numerically tested, but the current reduced model does not establish a physical `(m,n)a/(m,n)b` family or reciprocal A/B strike selectivity. See `research/chinese_bell/docs/CHINESE_TWO_TONE_CONSOLIDATED_AUDIT.md`.
 
-### Excitation and acoustics
+## Rules
 
-- meridional influence;
-- localized ring-strike direction/distribution and convergence;
-- circular Fourier strike projection, cosine/sine rotation covariance, m=0 invariance, and q=1 direct-vector-FEM integration;
-- direct-FEM modal-record DOF-layout checks, full-Fourier tracker basis-enrichment, and reconstructed outer-wall rotation covariance across three profile meshes;
-- acoustic pressure scaling/phase and modal-pressure contracts;
-- multipole and radiation diagnostics.
-
-Passing these numerical contracts does not establish experimental calibration.
-
-### External differential reference
-
-CalculiX comparisons check implementation agreement on selected same-geometry cases. They do not establish historical or experimental accuracy.
-
-## Current Chinese-bell status
-
-The Chinese-bell implementation is diagnostic/experimental and remains disconnected from the production optimizer. The complete historical Chinese programme is preserved under `research/chinese_bell/`; start with `research/chinese_bell/docs/CHINESE_RESEARCH_HANDOFF_1.2.126.md`.
-
-Durable conclusions:
-
-- the corrected surface-integrated non-axisymmetric strike model is retained;
-- modal identity must be based on spatial/subspace information, not frequency rank alone;
-- earlier large frequency-split observations included modal-window/association artifacts;
-- the current reduced FEM model has not established a physically identified `(m,n)a/(m,n)b` family with reciprocal A/B strike selectivity;
-- contact width remains a mathematical scenario parameter;
-- Chinese acoustic radiation/damping is not yet validated.
-
-## Maintained Chinese numerical contracts
-
-Only implementation-protecting tests remain in the maintained Chinese test surface:
-
-- Chinese-bell research contracts are outside the normal validation suite. They are built only with `BUILD_CHINESE_RESEARCH=ON`; see `research/chinese_bell/CMakeLists.txt`.
-
-The experiment-specific sweep matrices and branch-search executables were removed in 1.2.122 after their conclusions were consolidated into the Chinese audit document.
-
-## Numerical evidence policy
-
-A passing test establishes only the property it tests. Numerical PASS must not be interpreted as physical validation. Provisional Chinese questions remain blocked until independent reference or measurement evidence exists.
-
-## Non-negotiable rules
-
-- Do not tune gates to make a candidate pass.
-- Do not weaken a gate solely because an optimization run fails it.
-- Do not silently mix Western and Chinese objectives.
-- Do not use an experimental evaluator as a production physical gate.
-- Do not claim historical authenticity from geometric or acoustic heuristics alone.
+- Do not weaken thresholds to make a candidate pass.
+- Do not treat frequency rank as modal identity.
+- Do not mix Western and Chinese objectives.
+- Do not promote diagnostic acoustic proxies into physical gates.
+- Do not claim measured accuracy without an independent reference.
 
 
-## 1.2.132 focused release validation
+## 1.2.165 source-cleanup validation
 
-The following 11 targeted CTest cases passed after the direct-FEM Fourier DOF-layout correction: `acoustic_directional_field_rotation_contract`, `localized_strike_direction_contract`, `circular_localized_strike_projection`, `direct_elliptical_fem_evaluation`, `localized_strike_mesh_convergence`, `cylindrical_global_assembly_contract`, `cylindrical_global_modes_contract`, `cylindrical_modal_family_tracking`, `cylindrical_bell_geometry_modal_tracking`, `cylindrical_modal_field_cross_mesh`, and `modal_state_tracker_contract`. The production `bell` executable also built successfully. The full all-target build/test suite was not completed in the available build window and is not claimed as passing.
+- Enabled `-Wall -Wextra -Wpedantic` for the CLI target (MSVC `/W4`); removed the two unused helpers found by this diagnostic pass.
+- Full configured build completed successfully; no compiler warnings remained in the captured final build.
+- Focused regression batch: 10/10 passed (14.47 s). The batch covers core smoke, finite-distance radiation and real-FEM transfer, modal continuation/subspace, clapper dynamics/evaluation/objective and diagnostic tracker continuation.
+- The full 85-test suite was not run in this pass. Windows/MSVC was not tested.
 
-The three-mesh circular strike diagnostic established rotation covariance for the tested model/window (relative errors `1.44e-4`, `2.59e-5`, `8.10e-5`). The lowest pair frequency changed by about `14.9%` from `nNodes=15` to `31`; this sequence is not frequency-converged. These are numerical implementation checks, not physical validation of striker dimensions or acoustic radiation.
+
+## 1.2.166 — WAV writer and shared radiation validation
+
+- Added `wav_writer_contract`: validates canonical RIFF/WAVE PCM16 headers for mono/stereo, channel interleaving, sample rate, block alignment, clipping and signed endpoints; rejects non-finite samples, mismatched stereo buffers, invalid sample rates and an unwritable destination without creating a partial file.
+- All three synthesis workflows now use the same `src/audio/wav_writer.*` serialization implementation.
+- Added `directional_radiation_equivalence`: direct azimuthal quadrature vs Fourier/Bessel harmonic field, comparing complex amplitudes over 3 frequencies, 3 polar angles and 17 azimuths per condition. Observed max relative complex difference `2.99e-14`, max absolute difference `2.02e-18`.
+- Both production far-field paths (`synth-contact` mono and clapper/stereo) now use the harmonic field builder; the direct integral is retained as a test/reference implementation only. Finite-distance remains a distinct approximate kernel.
+- Full configured CMake build completed successfully with GCC 14.2, Linux, Release, C++17, `BUILD_SMOKE_TESTS=ON`, `BUILD_CHINESE_RESEARCH=OFF`.
+- 87 CTest cases are registered in 1.2.166 (85 from the consolidated baseline plus the two new contracts).
+- Focused 10-test batch passed 10/10: WAV writer, complex radiation equivalence, field rotation, listener geometry, finite-distance and real-FEM receiver, hammer contact, clapper dynamics, contact audio smoke and clapper audio smoke.
+- Full CTest suite was not run. Windows/MSVC was not tested.
 
 
-## 1.2.134 exact axis regularity
+## 1.2.167 — directional-field covariance and reuse
 
-The direct vector-FEM evaluator now uses exact `u=Pq` constraint elimination. `cylindrical_axis_regularity_contract`, `direct_elliptical_fem_evaluation`, `circular_localized_strike_projection`, and `modal_tracker_fem_continuation` pass. The 15/23/31-node circular diagnostic reports rotation covariance errors `9.10e-5`, `5.62e-5`, and `2.60e-5`; the lowest retained pair frequency changes by `-2.25%`, while its generalized-force power changes by `-32.6%`. This is improved numerical behavior, but contact/mesh sensitivity remains unresolved and the direct vector-FEM path remains diagnostic rather than the default production acoustic path.
+- Added no-copy `evaluateRotated(theta, frameRotation)`; it is algebraically equivalent to a materialized coefficient rotation followed by evaluation.
+- Expanded `acoustic_directional_field_rotation_contract` with joint-frame covariance, additive rotation composition, multi-angle no-copy equivalence and base-coefficient immutability.
+- Full configured CMake build completed successfully with GCC 14.2, Linux, Release, C++17, `BUILD_SMOKE_TESTS=ON`, `BUILD_CHINESE_RESEARCH=OFF`.
+- Focused acoustic/stereo batch: 3/3 passed (`acoustic_directional_field_rotation_contract`, `directional_radiation_equivalence`, `stereo_listener_geometry_contract`).
+- The full CTest suite was not run. Windows/MSVC was not tested.
+
+
+## 1.2.168 — joint stereo coordinate covariance
+
+- Added `stereo_coordinate_covariance_contract`. It checks common z-axis rotation of listener centre/ear coordinates, preservation of ear distances/polar angles/interaural geometry/propagation delays, invariant strike-to-listener relative azimuth, and complex left/right transfer invariance using no-copy field-frame evaluation.
+- Full configured CMake build completed successfully with GCC 14.2, Linux, Release, C++17, `BUILD_SMOKE_TESTS=ON`, `BUILD_CHINESE_RESEARCH=OFF`; `bell --version` reports `1.2.168`.
+- The seven focused acoustic/stereo/contact tests passed 7/7.
+- All 88 tests are registered. A full-suite run passed tests 1–69, then exceeded the execution window while running `cylindrical_ellipticity_convergence` (#70). A continuation passed tests 71–75 and timed out during `cylindrical_unified_ellipticity_audit` (#76). A separate run passed tests 77–88 (12/12). Thus 86 tests are confirmed passing; tests #70 and #76 remain unverified due to runtime limits, not recorded as failures.
+- Windows/MSVC was not tested.
+
+
+## 1.2.170 — clapper/modal frame covariance and polar-angle audit
+
+- Added `clapper_stereo_frame_covariance_contract`: production internal-clapper contact integration under a common rotation of an exactly degenerate cosine/sine modal pair and strike azimuth; compares contact times, force history, peak force, contact point and release modal state, then verifies complex modal radiation covariance at a rotated listener azimuth.
+- Added `stereo_polar_angle_approximation_contract`: compares centre-polar far-field sampling with direct per-ear polar/azimuth evaluation and checks the polar-specific Fourier/Bessel field against direct quadrature.
+- On the synthetic 640 Hz multi-harmonic fixture, normalized centre-polar shortcut errors were 61.22%, 29.30%, 14.20% and 6.97% at 0.75, 1.5, 3 and 6 m. The polar-specific builder differed from direct quadrature by less than `2e-11` of the reference peak. This is a fixture-specific diagnostic, not a general physical error bound.
+- No production contact, radiation, FEM or optimizer formulas were changed; the centre-polar shortcut remains in production and is now explicitly documented as an approximation requiring a polar-dependent follow-up.
+
+- Full configured CMake build completed successfully with GCC 14.2, Linux, Release, C++17, `BUILD_SMOKE_TESTS=ON`, `BUILD_CHINESE_RESEARCH=OFF`; `bell --version` reports `1.2.170`.
+- Focused 10-test stereo/acoustics/clapper regression batch passed 10/10.
+- 90 CTest cases are registered. All tests except the two long ellipticity audits were confirmed passing (88/88 of the non-long tests); `cylindrical_ellipticity_convergence` and `cylindrical_unified_ellipticity_audit` each exceeded a 180-second execution window without producing a test result. They are unverified, not recorded failures. Windows/MSVC was not tested.
+
+
+## 1.2.170 — polar-dependent directional field
+
+- Added `polar_directional_field_interpolation_contract`: a 91-node global audit grid, 40 complex comparisons against independently built exact-polar fields, local yaw-envelope interpolation at four listener distances and five yaw values, and azimuthal frame-rotation commutation. The global-grid fixture error was 0.442% of peak; the local-grid yaw-envelope error was 0.365% of peak.
+- Production stereo far-field now builds one polar family per mode and evaluates the two ear polar/azimuth directions from it. Mono retains one exact-polar field. FEM/contact/modal time histories are still shared.
+
+- Production stereo smoke test: `synth-clapper bells/best_geometry.json --stereo --duration 0.25 --listener-distance 3.0` generated a valid 48 kHz, 16-bit, two-channel PCM WAV using 32 modes. Contact duration was 1.04 ms; reported conservative energy drift was 3.5e-05. Wall time for the full command was 11.88 s in this Linux Release environment (includes geometry/modal/contact work; not a radiation-only benchmark).
+- Full configured CMake build completed successfully with GCC 14.2, Linux, Release, C++17, `BUILD_SMOKE_TESTS=ON`, `BUILD_CHINESE_RESEARCH=OFF`; CLI reports `BellOptimizer 1.2.170`.
+- CTest registered 91 tests. 88 tests were confirmed passing. `cylindrical_ellipticity_convergence` and `cylindrical_unified_ellipticity_audit` were excluded from the broad run because of their previously observed long runtimes; `cylindrical_modal_field_fem_matrix` exceeded the execution time limit in its separate tail run and remains unverified. Six directly relevant stereo/radiation tests passed 6/6.
+
+
+## 1.2.171 — real-FEM polar interpolation contract
+
+- Added `real_fem_polar_interpolation_contract`, using the production cylindrical FEM modal evaluator rather than a synthetic modal fixture. It covers 3 cases (17-node baseline, 25-node refinement of the same profile, and a second 17-node bell profile), 54 returned modes spanning 79.55–735.10 Hz, 1/3/5 m receiver distances, five yaw values (-90/-45/0/+45/+90 degrees), both ears, and 1,620 complex comparisons.
+- Worst per-mode peak-normalized complex interpolation error: `0.000118175` (0.01182%). Maximum phase error above 10% of each mode's peak: `0.00126688` degrees. Both pass the predeclared limits of 1% and 1 degree.
+- 162 independent direct-quadrature spot checks agreed with exact-polar Fourier/Bessel evaluation to relative error below `2e-5`.
+- This validates interpolation and the harmonic representation numerically for the tested real-FEM cases. It does not validate the physical far-field radiation model against measurements or establish universal bounds for arbitrary geometries.
+
+- Full configured Release build completed with GCC 14.2 / C++17 (`BUILD_SMOKE_TESTS=ON`, `BUILD_CHINESE_RESEARCH=OFF`); CLI reports `1.2.171`. Nine directly relevant stereo/radiation tests passed 9/9. A production clapper stereo smoke run generated a valid 48 kHz, 16-bit, 2-channel PCM WAV (0.25 s, 32 modes). 92 CTest cases are registered; the complete CTest suite was not run for this release.
+
+
+## 1.2.172 — prepared stereo receiver reuse
+
+- Added `PreparedStereoRadiation` to separate immutable per-mode polar-field preparation from receiver orientation queries. The query operation has no FEM, contact-integrator or modal-release dependency.
+- Extended the real-FEM polar contract across all three existing geometry/mesh cases: five yaw values at three centre-azimuth offsets per case, both ears, exact-polar Fourier/Bessel comparisons, receiver range/delay checks, stable mode/build counts, and out-of-envelope rejection.
+- The 9-test stereo/radiation regression group passed 9/9 after the change.
+- Full configured Release build completed successfully with GCC 14.2 / C++17 (`BUILD_SMOKE_TESTS=ON`, `BUILD_CHINESE_RESEARCH=OFF`).
+- Production `synth-clapper --stereo` smoke generated a 48 kHz, 16-bit, 2-channel PCM WAV, 0.25 s, 32 modes, at 15-degree head yaw.
+- 92 CTest cases are registered; the complete suite was not run. Windows/MSVC was not tested.
+- This validates reuse of the prepared receiver-query representation. It does not add an interactive UI or persistent cache between CLI processes, and does not validate physical acoustics against measurements.
+
+### 1.2.174 reusable modal-profile bundle
+
+`bell_modal_profile_contract` verifies boundary modal scalar/array round-trip, negative Fourier harmonic labels, identity rejection and reusable receiver preparation after loading the paired profile. `real_fem_polar_interpolation_contract` additionally serializes and reloads four real FEM modes from the 17-node reference geometry, checks exact preservation of inner/outer Fourier boundary traces, and confirms that the corresponding `.acfield` cache can prepare a stereo receiver without surface integration. The structural profile is boundary-complete for the current clapper/radiation path, but it is not a complete FEM restart.
+
+
+### 1.2.176 standalone synthesis SDK
+
+- `bell_synthesis` compiles as a separate target with no FEM/optimizer/CLI source dependency.
+- Installed package exposes `BellSynthesis::bell_synthesis`; external consumer project uses `find_package(BellSynthesis CONFIG REQUIRED)` and links only that target.
+- `synthesis_sdk_link_contract` checks profile-loader and clapper-contact symbols through the standalone target.
+- The installed static archive was inspected for optimizer/FEM namespace symbols; none were found.
+- This verifies package/link isolation, not a full high-level runtime audio-render workflow.

@@ -51,7 +51,7 @@ int main() {
         }
     }
 
-    const auto parsed = BellOptimizer::CCXParser::parse_file(std::string(BELL_SOURCE_DIR) + "/tests/reference/ccx/bell.dat", true);
+    const auto parsed = BellOptimizer::CCXParser::parse_file(std::string(BELL_SOURCE_DIR) + "/tests/reference/ccx/best_bell.dat", true);
     assert(!parsed.empty());
     assert(parsed.modes.size() >= 5);
     assert(parsed.modes.front().mode_number == 2);

@@ -9,6 +9,9 @@ int main() {
 
     const auto* bronze = BellOptimizer::find_material_preset("bell_bronze_reference");
     if (!bronze) return 2;
+    if (!bronze->has_structural_loss_factor ||
+        std::abs(bronze->structural_loss_factor - 1.8e-4) > 1e-12 ||
+        std::string(bronze->damping_source).empty()) return 9;
     if (!(bronze->material.E > 0.0 &&
           bronze->material.nu > -1.0 && bronze->material.nu < 0.5 &&
           bronze->material.rho > 0.0)) return 3;
@@ -18,6 +21,7 @@ int main() {
     if (!aluminum_bronze) return 4;
     if (std::abs(aluminum_bronze->material.E - 1.10e5) > 1e-12) return 5;
     if (std::abs(aluminum_bronze->material.rho - 7.40e-9) > 1e-18) return 6;
+    if (aluminum_bronze->has_structural_loss_factor) return 10;
 
     if (BellOptimizer::find_material_preset("Copper") != nullptr) return 7;
 

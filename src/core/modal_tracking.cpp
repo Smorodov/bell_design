@@ -110,6 +110,59 @@ std::vector<int> maximumAssignment(const std::vector<std::vector<double>>& score
 }
 } // namespace
 
+
+namespace {
+bool orthonormalize(const std::vector<std::vector<double>>& input,
+                    std::vector<std::vector<double>>& output) {
+    if (input.empty() || input.size() > 2) return false;
+    const std::size_t dimension = input.front().size();
+    if (dimension == 0) return false;
+    output.clear();
+    for (const auto& source : input) {
+        if (source.size() != dimension) return false;
+        std::vector<double> v = source;
+        for (const auto& q : output) {
+            double projection = 0.0;
+            for (std::size_t k = 0; k < dimension; ++k) projection += v[k] * q[k];
+            for (std::size_t k = 0; k < dimension; ++k) v[k] -= projection * q[k];
+        }
+        double norm2 = 0.0;
+        for (double x : v) norm2 += x * x;
+        if (!(norm2 > 1e-24) || !std::isfinite(norm2)) return false;
+        const double inv = 1.0 / std::sqrt(norm2);
+        for (double& x : v) x *= inv;
+        output.push_back(std::move(v));
+    }
+    return true;
+}
+}
+
+double boundaryTraceSubspaceSimilarity(
+    const std::vector<std::vector<double>>& reference_basis,
+    const std::vector<std::vector<double>>& candidate_basis) {
+    if (reference_basis.size() != candidate_basis.size()) return -1.0;
+    std::vector<std::vector<double>> a, b;
+    if (!orthonormalize(reference_basis, a) || !orthonormalize(candidate_basis, b) ||
+        a.front().size() != b.front().size()) return -1.0;
+    const std::size_t rank = a.size();
+    double g00 = 0.0, g01 = 0.0, g11 = 0.0;
+    for (std::size_t i = 0; i < rank; ++i) {
+        double x0 = 0.0, x1 = 0.0;
+        for (std::size_t k = 0; k < a[i].size(); ++k) {
+            x0 += a[i][k] * b[0][k];
+            if (rank == 2) x1 += a[i][k] * b[1][k];
+        }
+        g00 += x0 * x0;
+        if (rank == 2) { g01 += x0 * x1; g11 += x1 * x1; }
+    }
+    if (rank == 1) return std::sqrt(std::max(0.0, std::min(1.0, g00)));
+    const double trace = g00 + g11;
+    const double det = std::max(0.0, g00 * g11 - g01 * g01);
+    const double discriminant = std::sqrt(std::max(0.0, trace * trace - 4.0 * det));
+    const double lambda_min = std::max(0.0, 0.5 * (trace - discriminant));
+    return std::sqrt(std::min(1.0, lambda_min));
+}
+
 ModalTrackingReport trackModalFamilies(const ModalData& reference,
                                        ModalData& candidate,
                                        double ambiguity_similarity,

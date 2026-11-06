@@ -1,99 +1,62 @@
 # Architecture
 
-## 1. Application flow
+## Runtime paths
 
 ```text
 CLI
- ├─ optimize ── BellOptimizer ── ModalSolver
- │                              ├─ internal sparse FEM
- │                              └─ optional CalculiX adapter
- ├─ synth ───── stored modal data ── BellSynthesis
- └─ synth-geometry ─ BellGeometry ── modal evaluation ── BellSynthesis
+ ├─ optimize ─ BellOptimizer ─ ModalSolver
+ │                         ├─ internal axisymmetric solver
+ │                         └─ optional CalculiX adapter
+ ├─ synth ─ stored modal data ─ BellSynthesis
+ ├─ synth-geometry ─ profile/mesh ─ modal evaluation ─ BellSynthesis
+ ├─ synth-contact ─ direct cylindrical modes ─ striker/contact ─ modal release
+ └─ synth-clapper ─ direct cylindrical modes ─ pendulum/contact ─ modal release
+                         └─ shared far-field directional-field builder
+                            ├─ mono receiver or left ear
+                            └─ right ear
+ All synthesis commands ─ shared PCM16 WAV writer
 ```
 
-The direct cylindrical vector-FEM path is used by dedicated evaluation and diagnostic workflows and by the explicitly opt-in ellipticity evaluation bridge. It is not the production objective path for the Chinese-bell optimizer.
+The production optimizer and the direct cylindrical vector-FEM listening path are distinct. The latter must not be described as a 3-D FEM solution or as the optimizer's default solver.
 
-## 2. Domain and geometry
+## Module ownership
 
-- `src/core/bell_types.h` defines shared geometry, mesh, material and modal data contracts.
-- `src/core/bell_material.*` owns the single material-preset registry. Configuration selects a named preset; solver code receives only the resulting mechanical properties.
-- `src/core/bell_generator.*` constructs and validates the production meridional profile/mesh.
-- `src/models/bell_model_profile.*` supplies tradition-neutral and tradition-specific geometric priors.
+- `src/core/` owns shared domain types, material presets, profile generation, optimizer and legacy modal tracking.
+- `src/models/` owns geometry priors and bell-profile representations.
+- `src/fem/` owns Q4 element formulation, cylindrical global assembly, sparse eigensolver, direct vector-FEM modal evaluation and same-space modal comparison.
+- `src/math/` owns spline, coordinate-morphing and strain utilities. Coordinate morphing remains an active reduced-order path; it is not equivalent to solving the transformed geometry with direct FEM.
+- `src/excitation/` owns localized excitation, external striker contact, inner-clapper geometry, pendulum dynamics, modal coupling and modal decay.
+- `src/acoustics/` owns the direct far-field azimuthal reference integral, the production Fourier/Bessel directional-field builder, listener/ear geometry and finite-distance free-space receiver integral. The direct integral is retained as an independent numerical reference, not used by production synthesis.
+- `src/audio/` owns the shared little-endian PCM16 RIFF/WAVE serializer for mono and stereo outputs.
+- `src/synthesis/` owns modal synthesis; `src/commands/` owns CLI orchestration.
+- `src/ccx/` owns the optional CalculiX adapter; `src/validation/` owns the independent reference-mesh path.
 
-Tradition profiles are input priors, not claims of historical authenticity.
+## Modal identity is not one algorithm
 
-## 3. Optimization and modal solving
+Three responsibilities remain separate:
 
-- `src/core/bell_optimizer.*` owns the evolutionary search and the current Western tuning objective.
-- `src/core/modal_solver.hpp` defines the solver interface and neutral excitation-provider contract.
-- `src/fem/internal_modal_solver.*` implements the internal axisymmetric modal solver.
-- `src/ccx/ccx_solver.*` implements the optional external CalculiX reference adapter.
+1. `core/modal_tracking.*` tracks legacy `ModalData` using profile features for the existing optimizer.
+2. `fem/cylindrical_modal_tracking.*` compares direct-FEM modes/subspaces in a common DOF space using a mass metric and exact nested Fourier-basis embedding.
+3. `core/modal_state_tracker.*` is a diagnostic two-track predictor in the `bell_experimental` test-only library. It is not connected to the production optimizer. Full Q4 cross-mesh field comparison (`fem/cylindrical_modal_field.*`) is a separate diagnostic utility because the state tracker does not own Q4 topology.
 
-The legacy reduced-order coordinate-morphing calculation remains in use by the existing optimizer and geometry-listening path. It is not equivalent to solving the morphed geometry with direct vector FEM. It must not be silently described as such.
+The direct vector-FEM global DOF layout is `[node][component][Fourier basis]`, with component order `(ur, uphi, uz)`. Any exported volume or boundary modal records must preserve this mapping.
 
-## 4. Direct cylindrical vector FEM
+## Acoustic and stereo ownership
 
-`src/fem/` contains:
+The `synth-clapper --stereo` path computes one structural solution, one contact event and one modal release history. Both channels evaluate that shared history at separate receiver positions. No FEM/contact/time-integration solve is performed per channel.
 
-- `cylindrical_q4_element.*` — element kinematics and local stiffness/mass matrices;
-- `cylindrical_global_assembly.*` — global sparse K/M assembly;
-- `cylindrical_global_modes.*` — constrained generalized eigenproblem;
-- `sparse_matrix.hpp`, `sparse_eigensolver.hpp` — internal sparse data structures and eigensolver;
-- `cylindrical_bell_model.*`, `cylindrical_modal_evaluator.*` — geometry adapter and direct evaluation. The global vector-FEM DOF layout is `[node][component][Fourier basis]`, with component order `(ur, uphi, uz)`; exported full-volume and outer-boundary modal records preserve this exact order/basis mapping;
-- `cylindrical_modal_tracking.*` — same-DOF-space mass-metric overlap, subspace comparison and exact nested-basis embedding.
-- `cylindrical_modal_field.*` — independent full-field comparison across different Q4 meshes and nested Fourier bases; it is compiled into the test-only `bell_experimental` library, not `bell_core`. It evaluates each field in its own Q4 element, locates the corresponding physical meridional point in the other mesh, and integrates the density-weighted displacement product over the common domain and azimuth.
+- `far-field` builds one complex azimuthal field per mode through `buildDirectionalRadiationField` and evaluates it at receiver directions; this is the default low-cost path. The mono `synth-contact` path and stereo/clapper far-field path now share this implementation.
+- `finite-distance` evaluates an approximate free-space Green-kernel surface integral at each ear; it is an opt-in comparison path, not a full exterior acoustic solution.
+- The receiver frame includes head yaw, ear spacing, ear positions and propagation offsets. Head diffraction, pinna/HRTF, torso scattering, room response and calibrated SPL are not implemented.
 
-The FEM layer is tradition-neutral. Ellipticity enters geometry and assembly, not a post-hoc frequency correction.
+A rotation of the listener frame must not change the bell's FEM solution, clapper contact history or modal decay. Only receiver evaluation changes.
 
-## 5. Modal identity: three distinct responsibilities
+## Production and research boundaries
 
-These modules are intentionally not duplicates:
+The Chinese-bell implementation lives under `research/chinese_bell/` and is built only with `BUILD_CHINESE_RESEARCH=ON`. It must not leak into the Western optimizer objective. Its current physical modal-family identification is unresolved; see its status document.
 
-1. `core/modal_tracking.*` reorders legacy `ModalData` by available outer-profile shape features for the existing optimizer.
-2. `fem/cylindrical_modal_tracking.*` compares vector-FEM modes/subspaces in a common DOF space using a supplied mass metric and supports exact nested Fourier embedding.
-3. `core/modal_state_tracker.*`, built only into the test/diagnostic-only `bell_experimental` library, is a diagnostic two-track continuation aid. It predicts frequency with a constant-velocity Kalman model and associates candidate modes using shape/subspace evidence. It is not wired into the production optimizer and does not alter eigenpairs.
+The clapper acoustic objective is a tested primitive but is not wired into production candidate evaluation. Any such integration requires a separate explicit design decision and physical calibration gates.
 
-The state tracker itself still uses normalized profile-coordinate registration for boundary traces and row-sum lumped mass for same-mesh full-field features. Both the evaluator and state tracker use the global `[node][component][Fourier basis]` layout; cross-mesh full-field comparison remains the separate `cylindrical_modal_field` utility. The new `cylindrical_modal_field` utility provides a separate cross-mesh volume comparison using consistent density-weighted integration; it is not yet connected to the state tracker. Its current contract requires matching ellipticity and density and rejects insufficient common-domain coverage.
+## Build dependencies
 
-## 6. Excitation and acoustics
-
-- `src/excitation/meridional_influence.*` provides the existing meridional generalized-influence proxy.
-- `src/excitation/localized_strike.*` keeps the legacy ring-localized diagnostic and adds an explicit Fourier-based circular patch projection over direct vector-FEM modes.
-- Chinese-bell strike/objective code is intentionally detached under `research/chinese_bell/` and is not compiled into the normal production targets.
-- The research module consumes `bell_core` and may be enabled explicitly with `BUILD_CHINESE_RESEARCH=ON`.
-- `src/synthesis/bell_synthesis.*` converts scalar modal data into audio using the current acoustic approximation.
-
-The current production acoustic representation is scalar per mode: it retains modal radiation coefficients such as `Qd`, an axial first moment, and a normalized pressure coefficient. It is **not** a spatial acoustic field and therefore cannot by itself support physically meaningful stereo rotation. The new circular strike projection supplies structural generalized impulse factors only; it does not populate acoustic radiation coefficients.
-
-The planned stereo architecture is documented in `docs/ACOUSTIC_FIELD_AND_STEREO_AUDIT.md`: first construct and retain a production directional acoustic field with explicit angular/phase information, then rotate that field in post-processing for left/right observations. An exactly axisymmetric (`m=0`) field is rotation-invariant, so meaningful stereo requires retained non-axisymmetric excitation/radiation information. Rotation must not trigger another FEM or acoustic solve. Near-field spatial acoustics is intentionally out of scope for the first implementation.
-
-Mechanical generalized force, modal participation and radiated sound pressure are separate quantities. The current Chinese radiation proxy is not a calibrated full non-axisymmetric acoustic solution.
-
-## 7. Validation-only code
-
-`src/validation/nonaxisymmetric_reference.*` builds an independent 3-D reference mesh and is compiled only into the test-only `bell_validation` library. `src/ccx/` writes/runs/parses CalculiX jobs and remains in `bell_core` because the CLI exposes an optional CCX solver. Neither is part of the direct cylindrical production FEM formulation.
-
-## 8. Dependencies and build boundaries
-
-The application and internal solver require only C++17 and the standard library. CalculiX is optional. `BUILD_SMOKE_TESTS=OFF` excludes all validation executables and CTest registration; it does not remove runtime application code.
-
-## 8. Direct vector-FEM DOF layout contract
-
-The direct cylindrical Q4 element orders each node's DOFs as `[ur basis 0..B-1][uphi basis 0..B-1][uz basis 0..B-1]`. Thus the global index is `node * (3*B) + component * B + basis`. `ModalMode::fem_displacement` and `fem_mass_lumped_weights` preserve this layout; outer Fourier traces use `[profile point][basis]` per component. The evaluator, axis-constraint construction and full-field modal tracker must use this same mapping.
-
-
-## Cylindrical vector-Fourier axis regularity (1.2.134)
-
-Smooth Cartesian vector fields require `m=0` transverse traces to vanish; `m=1` transverse traces to satisfy `ur(1c)+uphi(1s)=0` and `ur(1s)-uphi(1c)=0`; `m=1` axial traces to vanish; and all `m>=2` component traces to vanish. The direct vector-FEM evaluator now imposes these conditions by exact `u=Pq` elimination and forms `P^T K P` / `P^T M P`, preserving symmetry without penalty stiffness. See `docs/CYLINDRICAL_VECTOR_AXIS_REGULARITY_AUDIT.md` for the derivation and regression coverage.
-
-
-## Contact-driven audio output (1.2.138)
-
-The opt-in `synth-contact` path uses the direct cylindrical vector-FEM modal solve with a bounded real Fourier basis m=0..3. It evaluates each retained mode at the strike azimuth, couples the resulting point-normal values to the finite Hertz hammer model, and continues the separation state with modal T60 decay. A separate acoustic step integrates the complex far-field surface transfer coefficient for one listener direction; the complex phase is retained when converting modal analytic acceleration to a real mono signal. The result is peak-normalized PCM16 WAV, not calibrated SPL. The legacy/default synthesis path remains unchanged. See `CONTACT_DRIVEN_AUDIO_PIPELINE.md` and `EXCITATION_AUDIT.md`.
-
-Structural Fourier displacement remains distinct from the acoustic transfer coefficient: the latter is computed by a spatially phased surface integral and is not stored as if it were a modal boundary field.
-
-
-## Internal clapper mechanics and audio path (1.2.140)
-
-The direct cylindrical modal evaluator exports mass-normalized Fourier displacement components on both the outer and inner meridional boundaries. Inner-wall arrays are copied from the actual inner-wall nodes in the full FEM eigenvector and are ordered like `inner_profile`; they are not inferred from the outer boundary. `Excitation::find_spherical_tip_contact_geometry` locates the spherical head against the cavity-facing inner meridian. In 1.2.140, `Excitation::simulateInternalClapperContact` adds a planar rigid-pendulum state and equal-and-opposite conservative Hertz coupling to the inner-wall modal coordinates. The new `synth-clapper` command sends the post-separation modal state through the outer-wall directional radiation approximation. The older `synth-contact` command remains a separate external translating-striker diagnostic. See `INTERNAL_CLAPPER_PHYSICAL_MODEL.md` for assumptions and limitations.
+The normal application requires C++17 and the standard library. CalculiX is optional. `BUILD_SMOKE_TESTS=OFF` excludes test/diagnostic libraries and test executables. The Chinese research target is separately controlled and defaults OFF.

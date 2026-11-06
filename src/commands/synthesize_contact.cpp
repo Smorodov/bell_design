@@ -1,5 +1,6 @@
 #include "synthesize_contact.hpp"
 #include "../core/bell_types.h"
+#include "../core/bell_material.h"
 #include "../core/bell_generator.h"
 #include "../core/modal_types.hpp"
 #include "../core/simple_json.hpp"
@@ -7,12 +8,17 @@
 #include "../fem/cylindrical_modal_evaluator.hpp"
 #include "../excitation/hammer_contact.hpp"
 #include "../excitation/clapper_dynamics.hpp"
+#include "../excitation/modal_decay.hpp"
 #include "../excitation/meridional_influence.hpp"
+#include "../acoustics/directional_radiation.hpp"
+#include "../audio/wav_writer.hpp"
+#include "../audio/modal_pressure_synthesis.hpp"
+#include "../acoustics/listener_geometry.hpp"
+#include "../acoustics/finite_distance_radiation.hpp"
 
 #include <algorithm>
 #include <cmath>
 #include <complex>
-#include <cstdint>
 #include <filesystem>
 #include <fstream>
 #include <iomanip>
@@ -43,92 +49,23 @@ BellGeometry loadGeometry(const std::string& filename) {
     return out;
 }
 
-void writeU16(std::ofstream& f, std::uint16_t v) {
-    const char b[2] = {static_cast<char>(v & 255), static_cast<char>((v >> 8) & 255)};
-    f.write(b, 2);
-}
-void writeU32(std::ofstream& f, std::uint32_t v) {
-    const char b[4] = {static_cast<char>(v & 255), static_cast<char>((v >> 8) & 255),
-                       static_cast<char>((v >> 16) & 255), static_cast<char>((v >> 24) & 255)};
-    f.write(b, 4);
-}
-bool writeMonoPcm16(const std::string& filename, const std::vector<double>& samples, int sampleRate) {
-    if (samples.empty() || sampleRate <= 0 || samples.size() > (std::numeric_limits<std::uint32_t>::max() - 36u) / 2u)
-        return false;
-    std::ofstream f(filename, std::ios::binary);
-    if (!f) return false;
-    const auto bytes = static_cast<std::uint32_t>(samples.size() * 2u);
-    f.write("RIFF", 4); writeU32(f, 36u + bytes); f.write("WAVE", 4);
-    f.write("fmt ", 4); writeU32(f, 16); writeU16(f, 1); writeU16(f, 1);
-    writeU32(f, static_cast<std::uint32_t>(sampleRate)); writeU32(f, static_cast<std::uint32_t>(sampleRate * 2));
-    writeU16(f, 2); writeU16(f, 16); f.write("data", 4); writeU32(f, bytes);
-    for (double x : samples) {
-        if (!std::isfinite(x)) return false;
-        const double y = std::clamp(x, -1.0, 1.0);
-        const auto v = static_cast<std::int16_t>(std::lrint(y * (y < 0.0 ? 32768.0 : 32767.0)));
-        writeU16(f, static_cast<std::uint16_t>(v));
-    }
-    return static_cast<bool>(f);
-}
-
 struct RenderMode { double omega, alpha, q0, v0; std::complex<double> radiation; };
-
-std::size_t basisForLabel(const std::vector<int>& labels, int label) {
-    const auto it = std::find(labels.begin(), labels.end(), label);
-    return it == labels.end() ? labels.size() : static_cast<std::size_t>(it - labels.begin());
-}
 
 double fourierValue(const std::vector<double>& values, std::size_t point,
                     std::size_t pointCount, const std::vector<int>& labels, double angle) {
     if (values.size() != pointCount * labels.size()) return 0.0;
-    double value = 0.0;
+    double result = 0.0;
     for (std::size_t b = 0; b < labels.size(); ++b) {
         const int label = labels[b];
-        const double c = values[point * labels.size() + b];
-        if (label == 0) value += c;
-        else if (label > 0) value += c * std::cos(label * angle);
-        else value += c * std::sin((-label) * angle);
+        const double coefficient = values[point * labels.size() + b];
+        if (label == 0) result += coefficient;
+        else if (label > 0) result += coefficient * std::cos(label * angle);
+        else result += coefficient * std::sin(-label * angle);
     }
-    return value;
+    return result;
 }
 
-std::complex<double> directionalRadiation(const ModalMode& mode,
-        const std::vector<Point2D>& profile, double listenerPolar,
-        double listenerAzimuth, unsigned azimuthSamples = 96) {
-    if (profile.size() < 2 || mode.outer_surface_harmonics.empty() ||
-        mode.outer_surface_fourier_radial.empty() || mode.outer_surface_fourier_axial.empty()) return {};
-    constexpr double soundSpeed = 343.0;
-    const double omega = 2.0 * kPi * mode.frequency_hz;
-    const double waveNumber = omega / soundSpeed;
-    const double sinEl = std::sin(listenerPolar), cosEl = std::cos(listenerPolar);
-    std::complex<double> integral{};
-    for (std::size_t j = 0; j + 1 < profile.size(); ++j) {
-        const double dr = profile[j + 1].r - profile[j].r;
-        const double dz = profile[j + 1].z - profile[j].z;
-        const double ds = std::hypot(dr, dz);
-        if (!(ds > 0.0)) continue;
-        for (unsigned a = 0; a < azimuthSamples; ++a) {
-            const double phi = 2.0 * kPi * (static_cast<double>(a) + 0.5) / azimuthSamples;
-            const double nr = dz / ds, nz = -dr / ds;
-            const double ur0 = 0.5 * (fourierValue(mode.outer_surface_fourier_radial, j,
-                profile.size(), mode.outer_surface_harmonics, phi) +
-                fourierValue(mode.outer_surface_fourier_radial, j + 1,
-                profile.size(), mode.outer_surface_harmonics, phi));
-            const double uz0 = 0.5 * (fourierValue(mode.outer_surface_fourier_axial, j,
-                profile.size(), mode.outer_surface_harmonics, phi) +
-                fourierValue(mode.outer_surface_fourier_axial, j + 1,
-                profile.size(), mode.outer_surface_harmonics, phi));
-            const double normal = ur0 * nr + uz0 * nz;
-            const double r = 0.5 * (profile[j].r + profile[j + 1].r) * 1.0e-3;
-            const double z = 0.5 * (profile[j].z + profile[j + 1].z) * 1.0e-3;
-            const double dsMeters = ds * 1.0e-3;
-            const double phase = -waveNumber * (r * sinEl * std::cos(phi - listenerAzimuth) + z * cosEl);
-            integral += normal * r * dsMeters * (2.0 * kPi / azimuthSamples) *
-                        std::complex<double>(std::cos(phase), std::sin(phase));
-        }
-    }
-    return integral;
-}
+
 }
 
 int command_synthesize_contact(int argc, char* argv[]) {
@@ -137,7 +74,7 @@ int command_synthesize_contact(int argc, char* argv[]) {
     double hertzStiffness = 2.0e7, contactStep = 2.0e-6, contactDuration = 0.025;
     double t60 = 5.0, audioDuration = 6.0;
     double strikeAzimuthDeg = 0.0, listenerPolarDeg = 30.0, listenerAzimuthDeg = 0.0;
-    int sampleRate = 48000, meshNodes = 71;
+        int sampleRate = 48000, meshNodes = 71;
     bool geometrySet = false;
     for (int i = 1; i < argc; ++i) {
         const std::string a = argv[i];
@@ -236,7 +173,8 @@ int command_synthesize_contact(int argc, char* argv[]) {
             if (!std::isfinite(phiNormal) || std::abs(phiNormal) < 1.0e-14 || !(m.modal_mass > 0.0)) continue;
             // Direct cylindrical FEM uses SI geometry/material and mass-normalized modes.
             contactModes.push_back({m.frequency_hz, m.modal_mass, phiNormal});
-            radiationCoefficients.push_back(directionalRadiation(m, profile, listenerPolar, listenerAzimuth));
+            const auto directionalField = Acoustics::buildDirectionalRadiationField(m, profile, listenerPolar, 1.0);
+            radiationCoefficients.push_back(directionalField.evaluate(listenerAzimuth));
             modeOmega.push_back(2.0 * kPi * m.frequency_hz);
         }
         if (contactModes.size() < 3) throw std::runtime_error("insufficient Fourier modes have strike participation");
@@ -296,7 +234,7 @@ int command_synthesize_contact(int argc, char* argv[]) {
         if (!(peak > 1.0e-30) || !std::isfinite(peak)) throw std::runtime_error("acoustic radiation proxy is numerically zero");
         const double scale = 0.95 / peak;
         for (double& x : audio) x *= scale;
-        if (!writeMonoPcm16(output, audio, sampleRate)) throw std::runtime_error("failed to write WAV file");
+        if (!Audio::writeMonoPcm16(output, audio, sampleRate)) throw std::runtime_error("failed to write WAV file");
 
         std::filesystem::path metadataPath(output);
         metadataPath.replace_extension();
@@ -340,8 +278,13 @@ int command_synthesize_clapper(int argc, char* argv[]) {
     double initialAngleDeg = 0.0, initialAngularVelocity = 3.2;
     double tipYoung = 200.0e9, tipPoisson = 0.29, hertzStiffness = 0.0;
     double contactStep = 2.0e-6, impactHorizon = 0.25;
-    double t60 = 5.0, audioDuration = 6.0;
+    double t60 = 5.0, structuralLossFactor = std::numeric_limits<double>::quiet_NaN(), audioDuration = 6.0;
+    std::string decayModelName = "fixed-t60", materialPresetName = "bell_bronze_reference";
+    bool lossFactorOverride = false;
     double strikeAzimuthDeg = 0.0, listenerPolarDeg = 30.0, listenerAzimuthDeg = 0.0;
+    double listenerDistance = 3.0, earSpacing = 0.18, headYawDeg = 0.0;
+    bool stereoOutput = false;
+    std::string stereoRadiationModel = "far-field";
     int sampleRate = 48000, meshNodes = 71;
     bool geometrySet = false;
     for (int i = 1; i < argc; ++i) {
@@ -354,8 +297,8 @@ int command_synthesize_clapper(int argc, char* argv[]) {
             std::cout << "Usage: bell synth-clapper [geometry.json] [--output file.wav] [--clapper-mass kg] "
                          "[--clapper-inertia kg-m2] [--com-length m] [--tip-length m] [--tip-radius m] "
                          "[--pivot-z m] [--initial-angle-deg deg] [--initial-angular-velocity rad/s] "
-                         "[--contact-step s] [--impact-horizon s] [--t60 s] [--duration s] "
-                         "[--strike-azimuth-deg deg] [--listener-polar-deg deg] [--listener-azimuth-deg deg]\n"
+                         "[--contact-step s] [--impact-horizon s] [--material-preset id] [--t60 s] [--decay-model fixed-t60|structural-loss] [--loss-factor eta] [--duration s] "
+                         "[--strike-azimuth-deg deg] [--listener-polar-deg deg] [--listener-azimuth-deg deg] [--stereo] [--stereo-radiation far-field|finite-distance] [--listener-distance m] [--ear-spacing m] [--head-yaw-deg deg]\n"
                          "Planar physical pendulum + internal spherical Hertz contact + Fourier FEM + far-field modal radiation.\n";
             return 0;
         } else if (a == "--output") output = value("--output");
@@ -375,12 +318,20 @@ int command_synthesize_clapper(int argc, char* argv[]) {
         else if (a == "--hertz-stiffness") hertzStiffness = std::stod(value("--hertz-stiffness"));
         else if (a == "--contact-step") contactStep = std::stod(value("--contact-step"));
         else if (a == "--impact-horizon") impactHorizon = std::stod(value("--impact-horizon"));
+        else if (a == "--material-preset") materialPresetName = value("--material-preset");
         else if (a == "--t60") t60 = std::stod(value("--t60"));
+        else if (a == "--decay-model") decayModelName = value("--decay-model");
+        else if (a == "--loss-factor") { structuralLossFactor = std::stod(value("--loss-factor")); lossFactorOverride = true; }
         else if (a == "--duration") audioDuration = std::stod(value("--duration"));
         else if (a == "--sample-rate") sampleRate = std::stoi(value("--sample-rate"));
         else if (a == "--strike-azimuth-deg") strikeAzimuthDeg = std::stod(value("--strike-azimuth-deg"));
         else if (a == "--listener-polar-deg") listenerPolarDeg = std::stod(value("--listener-polar-deg"));
         else if (a == "--listener-azimuth-deg") listenerAzimuthDeg = std::stod(value("--listener-azimuth-deg"));
+        else if (a == "--stereo") stereoOutput = true;
+        else if (a == "--stereo-radiation") stereoRadiationModel = value("--stereo-radiation");
+        else if (a == "--listener-distance") listenerDistance = std::stod(value("--listener-distance"));
+        else if (a == "--ear-spacing") earSpacing = std::stod(value("--ear-spacing"));
+        else if (a == "--head-yaw-deg") headYawDeg = std::stod(value("--head-yaw-deg"));
         else if (a.rfind("--", 0) == 0) { std::cerr << "Unknown option: " << a << "\n"; return 2; }
         else if (!geometrySet) { geometryFile = a; geometrySet = true; }
         else { std::cerr << "Unexpected argument: " << a << "\n"; return 2; }
@@ -396,17 +347,39 @@ int command_synthesize_clapper(int argc, char* argv[]) {
             !std::isfinite(initialAngularVelocity) || !std::isfinite(tipYoung) || tipYoung <= 0.0 ||
             !std::isfinite(tipPoisson) || tipPoisson <= -1.0 || tipPoisson >= 0.5 ||
             !std::isfinite(contactStep) || contactStep <= 0.0 || !std::isfinite(impactHorizon) || impactHorizon <= 0.0 ||
-            !std::isfinite(t60) || t60 <= 0.0 || !std::isfinite(audioDuration) || audioDuration <= 0.1 ||
+            !std::isfinite(t60) || t60 <= 0.0 || (lossFactorOverride && !std::isfinite(structuralLossFactor)) ||
+            !std::isfinite(audioDuration) || audioDuration <= 0.1 ||
             sampleRate < 8000 || sampleRate > 192000 || meshNodes < 11 || meshNodes > 101 ||
             audioDuration * sampleRate > 10000000.0 || !std::isfinite(strikeAzimuthDeg) ||
             !std::isfinite(listenerPolarDeg) || listenerPolarDeg < 0.0 || listenerPolarDeg > 180.0 ||
-            !std::isfinite(listenerAzimuthDeg))
-            throw std::invalid_argument("invalid clapper, contact, audio, or mesh parameter");
+            !std::isfinite(listenerAzimuthDeg) || !std::isfinite(listenerDistance) || listenerDistance <= 0.25 ||
+            !std::isfinite(earSpacing) || earSpacing <= 0.0 || earSpacing >= 0.5 ||
+            !std::isfinite(headYawDeg) || headYawDeg < -90.0 || headYawDeg > 90.0)
+            throw std::invalid_argument("invalid clapper, contact, audio, listener distance, ear spacing, or mesh parameter");
+        if (stereoRadiationModel != "far-field" && stereoRadiationModel != "finite-distance")
+            throw std::invalid_argument("--stereo-radiation must be far-field or finite-distance");
+        if (!stereoOutput && stereoRadiationModel != "far-field")
+            throw std::invalid_argument("--stereo-radiation finite-distance requires --stereo");
+        Excitation::ModalDecayModel decayModel;
+        if (decayModelName == "fixed-t60") decayModel = Excitation::ModalDecayModel::FixedT60;
+        else if (decayModelName == "structural-loss") decayModel = Excitation::ModalDecayModel::StructuralLossFactor;
+        else throw std::invalid_argument("--decay-model must be fixed-t60 or structural-loss");
+        const auto* materialPreset = find_material_preset(materialPresetName);
+        if (!materialPreset) {
+            std::string available;
+            for (const auto& id : material_preset_ids()) available += " " + id;
+            throw std::invalid_argument("unknown --material-preset '" + materialPresetName + "'; available:" + available);
+        }
+        if (!lossFactorOverride && materialPreset->has_structural_loss_factor)
+            structuralLossFactor = materialPreset->structural_loss_factor;
+        if (decayModel == Excitation::ModalDecayModel::StructuralLossFactor &&
+            (!std::isfinite(structuralLossFactor) || !(structuralLossFactor > 0.0 && structuralLossFactor < 0.1)))
+            throw std::invalid_argument("selected material preset has no measured structural loss factor; use --loss-factor only for an explicit sensitivity study");
 
         const BellGeometry geometry = loadGeometry(geometryFile);
         if (geometry.ellipticity < 0.999999)
             throw std::runtime_error("synth-clapper currently requires circular geometry; elliptical impact needs a 3D clapper path");
-        BellMaterial material;
+        BellMaterial material = materialPreset->material;
         BellMeshConfig meshConfig; meshConfig.nNodes = meshNodes;
         BellGenerator generator(material, meshConfig);
         generator.setGeometry(geometry);
@@ -431,20 +404,17 @@ int command_synthesize_clapper(int argc, char* argv[]) {
             throw std::runtime_error("Fourier cylindrical FEM modal solve failed");
 
         std::vector<const ModalMode*> usedModes;
-        std::vector<std::complex<double>> radiation;
         for (const auto& m : modalData.modes) {
             const std::size_t basis = m.inner_surface_harmonics.size();
             if (basis == 0 || m.inner_surface_fourier_radial.size() != innerProfileMm.size() * basis ||
                 m.inner_surface_fourier_axial.size() != innerProfileMm.size() * basis ||
                 m.outer_surface_harmonics.empty()) continue;
             usedModes.push_back(&m);
-            radiation.push_back(directionalRadiation(m, outerProfile,
-                listenerPolarDeg * kPi / 180.0, listenerAzimuthDeg * kPi / 180.0));
         }
         if (usedModes.size() < 3) throw std::runtime_error("insufficient modes with both inner and outer boundary fields");
 
         std::vector<Point2D> innerProfileSi = directModel.mesh_si.inner_profile;
-        if (!std::isfinite(pivotZ)) pivotZ = innerProfileSi.front().z - 0.03;
+        if (!std::isfinite(pivotZ)) pivotZ = innerProfileSi.front().z - 0.07;
         const double effectiveModulus = 1.0 / ((1.0 - tipPoisson * tipPoisson) / tipYoung +
             (1.0 - material.nu * material.nu) / directModel.young_modulus_pa);
         if (!(hertzStiffness > 0.0)) hertzStiffness = (4.0 / 3.0) * effectiveModulus * std::sqrt(tipRadius);
@@ -478,40 +448,163 @@ int command_synthesize_clapper(int argc, char* argv[]) {
                 throw std::runtime_error("non-finite modal release state at mode " + std::to_string(i));
         }
 
+        struct ModeAuditRow {
+            double frequency_hz;
+            double modal_mass;
+            double q_release;
+            double v_release;
+            double alpha;
+            double t60_mode;
+            std::complex<double> radiation;
+        };
         std::vector<RenderMode> renderModes;
+        std::vector<std::complex<double>> radiationLeft, radiationRight;
+        std::vector<ModeAuditRow> modeAuditRows;
+        const double polar = listenerPolarDeg * kPi / 180.0;
+        const double azimuth = listenerAzimuthDeg * kPi / 180.0;
+        const auto listener = Acoustics::makeStereoListenerGeometry(
+            listenerDistance, polar, azimuth, earSpacing,
+            headYawDeg * kPi / 180.0);
+        double leftDelay = listener.left.propagation_delay_s;
+        double rightDelay = listener.right.propagation_delay_s;
+        Acoustics::PreparedStereoRadiation preparedStereoRadiation;
+        std::vector<Acoustics::StereoRadiationTransfer> preparedStereoTransfers;
+        if (stereoOutput && stereoRadiationModel != "finite-distance") {
+            std::vector<const ModalMode*> radiationModes(usedModes.begin(), usedModes.end());
+            preparedStereoRadiation = Acoustics::prepareStereoRadiation(
+                radiationModes, outerProfile, listenerDistance, polar, azimuth, earSpacing,
+                0.5 * kPi, 2.0 * kPi / 180.0);
+            preparedStereoTransfers = preparedStereoRadiation.query(headYawDeg * kPi / 180.0);
+            if (preparedStereoTransfers.size() != usedModes.size())
+                throw std::runtime_error("prepared stereo radiation mode count mismatch");
+            if (!preparedStereoTransfers.empty()) {
+                leftDelay = preparedStereoTransfers.front().left_delay_s;
+                rightDelay = preparedStereoTransfers.front().right_delay_s;
+            }
+        }
         for (std::size_t i = 0; i < usedModes.size(); ++i) {
-            const double alpha = std::log(1000.0) / t60;
+            Excitation::ModalDecayParameters decay;
+            if (!Excitation::calculateModalDecay(usedModes[i]->frequency_hz, decayModel, t60,
+                                                  structuralLossFactor, decay))
+                throw std::runtime_error("invalid modal decay parameters for mode " + std::to_string(i));
+            const double alpha = decay.alpha_per_second;
             const double omega = 2.0 * kPi * usedModes[i]->frequency_hz;
-            if (omega * omega <= alpha * alpha || std::abs(radiation[i]) < 1.0e-18) continue;
-            renderModes.push_back({omega, alpha, impact.modal_displacement_at_separation[i],
-                                   impact.modal_velocity_at_separation[i], radiation[i]});
+            std::complex<double> centreRadiation{}, radL{}, radR{};
+            if (stereoOutput && stereoRadiationModel == "finite-distance") {
+                // The structural/contact/modal history remains shared. Only the
+                // receiver transfer is evaluated independently at the two exact
+                // ear points using the finite-distance Green-kernel proxy.
+                radL = Acoustics::evaluateFiniteDistanceRadiation(
+                    *usedModes[i], outerProfile, listener.left, 720, 343.0, 16);
+                radR = Acoustics::evaluateFiniteDistanceRadiation(
+                    *usedModes[i], outerProfile, listener.right, 720, 343.0, 16);
+                centreRadiation = 0.5 * (radL + radR);
+            } else if (!stereoOutput) {
+                // Mono needs only its declared listener direction; retain the
+                // single-polar-field path instead of paying for a stereo grid.
+                const auto field = Acoustics::buildDirectionalRadiationField(
+                    *usedModes[i], outerProfile, polar, listenerDistance);
+                centreRadiation = field.evaluate(azimuth);
+                radL = radR = centreRadiation;
+            } else {
+                // The prepared immutable polar family is built once before this
+                // loop and can serve repeated listener-yaw queries without FEM,
+                // contact, modal release, or surface-integration work.
+                const auto& transfer = preparedStereoTransfers.at(i);
+                radL = transfer.left;
+                radR = transfer.right;
+                centreRadiation = 0.5 * (radL + radR);
+            }
+            if (omega * omega <= alpha * alpha ||
+                (std::abs(radL) < 1.0e-18 && std::abs(radR) < 1.0e-18)) continue;
+            const double qRelease = impact.modal_displacement_at_separation[i];
+            const double vRelease = impact.modal_velocity_at_separation[i];
+            renderModes.push_back({omega, alpha, qRelease, vRelease, stereoOutput ? 0.5 * (radL + radR) : centreRadiation});
+            const double leftRangeScale = (!stereoOutput || stereoRadiationModel == "finite-distance") ? 1.0 :
+                preparedStereoTransfers[i].left_range_scale;
+            const double rightRangeScale = (!stereoOutput || stereoRadiationModel == "finite-distance") ? 1.0 :
+                preparedStereoTransfers[i].right_range_scale;
+            radiationLeft.push_back(radL * leftRangeScale);
+            radiationRight.push_back(radR * rightRangeScale);
+            modeAuditRows.push_back({usedModes[i]->frequency_hz, usedModes[i]->modal_mass,
+                                     qRelease, vRelease, alpha, decay.t60_seconds, stereoOutput ? 0.5 * (radL + radR) : centreRadiation});
         }
         if (renderModes.size() < 3) throw std::runtime_error("fewer than three underdamped radiating modes remain");
 
+        std::vector<Audio::ModalPressureTerm> pressureLeftModes, pressureRightModes, pressureMonoModes;
+        pressureLeftModes.reserve(renderModes.size()); pressureRightModes.reserve(renderModes.size());
+        pressureMonoModes.reserve(renderModes.size());
+        for (std::size_t i = 0; i < renderModes.size(); ++i) {
+            const auto& m = renderModes[i];
+            pressureLeftModes.push_back({m.omega, m.alpha, m.q0, m.v0, radiationLeft.at(i)});
+            pressureRightModes.push_back({m.omega, m.alpha, m.q0, m.v0, radiationRight.at(i)});
+            pressureMonoModes.push_back({m.omega, m.alpha, m.q0, m.v0, m.radiation});
+        }
+
         const std::size_t count = static_cast<std::size_t>(std::llround(audioDuration * sampleRate));
-        std::vector<double> audio(count, 0.0);
+        std::vector<double> audio, audioLeft, audioRight;
         const double releaseTime = impact.separation_time_seconds;
         double peak = 0.0;
-        for (std::size_t n = 0; n < count; ++n) {
-            const double tau = static_cast<double>(n) / sampleRate - releaseTime;
-            if (tau < 0.0) continue;
-            double p = 0.0;
-            for (const auto& m : renderModes) {
-                const double wd = std::sqrt(m.omega * m.omega - m.alpha * m.alpha);
-                const double b = (m.v0 + m.alpha * m.q0) / wd;
-                const std::complex<double> qdd = std::complex<double>(m.q0, -b) *
-                    std::exp(std::complex<double>(-m.alpha, wd) * tau) *
-                    std::pow(std::complex<double>(-m.alpha, wd), 2);
-                p += std::real(m.radiation * qdd);
+        if (stereoOutput) {
+            audioLeft.assign(count, 0.0); audioRight.assign(count, 0.0);
+            for (std::size_t n = 0; n < count; ++n) {
+                const double t = static_cast<double>(n) / sampleRate;
+                const double pL = Audio::evaluateModalPressureAt(
+                    pressureLeftModes, t, releaseTime, leftDelay);
+                const double pR = Audio::evaluateModalPressureAt(
+                    pressureRightModes, t, releaseTime, rightDelay);
+                if (!std::isfinite(pL) || !std::isfinite(pR))
+                    throw std::runtime_error("non-finite stereo acoustic sample at time " + std::to_string(t));
+                audioLeft[n] = pL; audioRight[n] = pR;
+                peak = std::max({peak, std::abs(pL), std::abs(pR)});
             }
-            if (!std::isfinite(p)) throw std::runtime_error("non-finite acoustic sample at time " + std::to_string(static_cast<double>(n) / sampleRate));
-            audio[n] = p;
-            peak = std::max(peak, std::abs(p));
+        } else {
+            audio.assign(count, 0.0);
+            for (std::size_t n = 0; n < count; ++n) {
+                const double p = Audio::evaluateModalPressureAt(
+                    pressureMonoModes, static_cast<double>(n) / sampleRate, releaseTime, 0.0);
+                if (!std::isfinite(p)) throw std::runtime_error("non-finite acoustic sample at time " + std::to_string(static_cast<double>(n) / sampleRate));
+                audio[n] = p; peak = std::max(peak, std::abs(p));
+            }
         }
         if (!(peak > 1.0e-30) || !std::isfinite(peak)) throw std::runtime_error("acoustic radiation proxy is numerically zero");
         const double scale = 0.95 / peak;
-        for (double& x : audio) x *= scale;
-        if (!writeMonoPcm16(output, audio, sampleRate)) throw std::runtime_error("failed to write WAV file");
+        if (stereoOutput) {
+            for (double& x : audioLeft) x *= scale;
+            for (double& x : audioRight) x *= scale;
+        } else {
+            for (double& x : audio) x *= scale;
+        }
+        double sumSquares = 0.0;
+        if (stereoOutput) {
+            for (std::size_t i = 0; i < count; ++i) sumSquares += 0.5 * (audioLeft[i]*audioLeft[i] + audioRight[i]*audioRight[i]);
+            if (!Audio::writeStereoPcm16(output, audioLeft, audioRight, sampleRate)) throw std::runtime_error("failed to write stereo WAV file");
+        } else {
+            for (double x : audio) sumSquares += x * x;
+            if (!Audio::writeMonoPcm16(output, audio, sampleRate)) throw std::runtime_error("failed to write mono WAV file");
+        }
+        const double rms = std::sqrt(sumSquares / static_cast<double>(count));
+        const double crestFactor = rms > 0.0 ? 0.95 / rms : 0.0;
+
+        const double topZ = innerProfileSi.front().z;
+        const double mouthZ = innerProfileSi.back().z;
+        const double axialSpan = mouthZ - topZ;
+        if (std::abs(axialSpan) < 1.0e-9) throw std::runtime_error("inner profile has zero axial span");
+        const double strikeFraction = (impact.first_contact_surface_z_m - topZ) / axialSpan;
+        const bool strikeInTypicalBand = strikeFraction >= 0.50 && strikeFraction <= 0.70;
+
+        std::filesystem::path modesPath(output);
+        modesPath.replace_extension(); modesPath += "_modes.csv";
+        std::ofstream modesFile(modesPath);
+        if (modesFile) {
+            modesFile << "frequency_hz,modal_mass_kg,q_at_separation_m,v_at_separation_m_per_s,decay_alpha_per_s,mode_t60_s,radiation_real,radiation_imag,radiation_magnitude\n";
+            modesFile << std::setprecision(17);
+            for (const auto& row : modeAuditRows)
+                modesFile << row.frequency_hz << ',' << row.modal_mass << ',' << row.q_release << ','
+                          << row.v_release << ',' << row.alpha << ',' << row.t60_mode << ','
+                          << row.radiation.real() << ',' << row.radiation.imag()
+                          << ',' << std::abs(row.radiation) << '\n';
+        }
 
         std::filesystem::path metadataPath(output);
         metadataPath.replace_extension(); metadataPath += "_metadata.txt";
@@ -529,17 +622,47 @@ int command_synthesize_clapper(int argc, char* argv[]) {
                  << "Strike azimuth deg: " << strikeAzimuthDeg << "\nFirst contact s: " << impact.first_contact_time_seconds
                  << "\nSeparation s: " << impact.separation_time_seconds << "\nContact duration s: " << impact.contact_duration_seconds
                  << "\nPeak contact force N: " << impact.peak_contact_force_n
+                 << "\nFirst contact surface point r,z m: " << impact.first_contact_surface_r_m << ", " << impact.first_contact_surface_z_m
+                 << "\nStrike height fraction (0=top, 1=mouth): " << strikeFraction
+                 << "\nStrike height in requested typical band 0.50..0.70: " << (strikeInTypicalBand ? "yes" : "no")
                  << "\nConservative energy relative drift: " << impact.maximum_relative_energy_error
-                 << "\nT60 s: " << t60 << "\nListener polar/azimuth deg: " << listenerPolarDeg << ", " << listenerAzimuthDeg
-                 << "\nSample rate Hz: " << sampleRate << "\nOutput peak normalization: 0.95 (not calibrated SPL)\n"
-                 << "Radiation: outer-surface directional far-field modal approximation; no room acoustics\n";
+                 << "\nMaterial preset: " << materialPreset->id
+                 << "\nMaterial preset description: " << materialPreset->description
+                 << "\nMaterial damping source: " << materialPreset->damping_source
+                 << "\nDecay model: " << decayModelName
+                 << "\nFixed T60 s: " << t60
+                 << "\nStructural loss factor eta: " << (std::isfinite(structuralLossFactor) ? std::to_string(structuralLossFactor) : "not used")
+                 << "\nLoss factor source: " << (lossFactorOverride ? "explicit sensitivity override" : materialPreset->damping_source)
+                 << "\nPer-mode decay alpha and T60 are recorded in modal audit CSV"
+                 << "\nListener polar/azimuth deg: " << listenerPolarDeg << ", " << listenerAzimuthDeg
+                 << "\nOutput channels: " << (stereoOutput ? "2 (stereo)" : "1 (mono)")
+                 << "\nListener distance m: " << listenerDistance << "\nEar spacing m: " << earSpacing
+                 << "\nHead yaw deg: " << headYawDeg
+                 << "\nEar azimuth deg: " << listener.left.azimuth_rad * 180.0 / kPi << ", " << listener.right.azimuth_rad * 180.0 / kPi
+                 << "\nEar polar deg (geometric): " << listener.left.polar_rad * 180.0 / kPi << ", " << listener.right.polar_rad * 180.0 / kPi
+                 << "\nEar angular separation deg: " << listener.ear_angular_separation_rad * 180.0 / kPi
+                 << "\nEar propagation offsets s (relative to centre): " << leftDelay << ", " << rightDelay
+                 << "\nSample rate Hz: " << sampleRate << "\nOutput peak normalization: 0.95 (not calibrated SPL)"
+                 << "\nOutput RMS: " << rms << "\nOutput crest factor: " << crestFactor
+                 << "\nModal audit CSV: " << modesPath.string() << "\n"
+                 << "Radiation model: " << (stereoOutput ? stereoRadiationModel : "far-field") << "\n"
+                 << "Radiation: " << (stereoOutput && stereoRadiationModel == "finite-distance" ?
+                    "outer-shell finite-distance free-space Green-kernel proxy; not a complete exterior acoustic solution" :
+                    "outer-surface directional far-field modal approximation") << "; no room acoustics\n"
+                 << "Stereo model: shared FEM/contact/modal response; left/right receiver transfers evaluated at geometric ear points; path-distance propagation delay; no per-channel structural solve\n"
+                 << "Limitations: no head shadow, pinna/HRTF, binaural filtering or room reflections\n";
         }
         std::cout << std::fixed << std::setprecision(5)
-                  << "Generated " << output << " | modes=" << renderModes.size()
+                  << "Generated " << output << " | channels=" << (stereoOutput ? 2 : 1) << " | modes=" << renderModes.size()
                   << " | first contact=" << impact.first_contact_time_seconds << " s"
                   << " | contact=" << impact.contact_duration_seconds << " s"
                   << " | peak force=" << impact.peak_contact_force_n << " N"
-                  << " | energy drift=" << std::scientific << impact.maximum_relative_energy_error << "\n";
+                  << " | strike height=" << std::fixed << std::setprecision(1) << (100.0 * strikeFraction) << "%"
+                  << " | RMS=" << std::scientific << rms
+                  << " | energy drift=" << impact.maximum_relative_energy_error << "\n";
+        if (!strikeInTypicalBand)
+            std::cout << "WARNING: first contact is outside the typical 50-70% bell-height band; adjust pivot/trajectory if targeting a conventional strike.\n";
+        std::cout << "Mode diagnostics: " << modesPath.string() << "\n";
         return 0;
     } catch (const std::exception& e) {
         std::cerr << "synth-clapper error: " << e.what() << "\n";

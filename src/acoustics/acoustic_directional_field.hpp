@@ -16,7 +16,7 @@ namespace BellOptimizer::Acoustics {
 // operation. Population from FEM/acoustic radiation remains a separate gate.
 struct AcousticDirectionalField {
     double observation_radius_m = 1.0;
-    double observation_elevation_rad = 0.0;
+    double observation_polar_rad = 0.0;
     std::vector<int> orders;
     std::vector<std::complex<double>> coefficients;
 
@@ -30,6 +30,13 @@ struct AcousticDirectionalField {
 
     // Evaluate the retained harmonic field at azimuth theta.
     std::complex<double> evaluate(double theta_rad) const;
+
+    // Evaluate the same immutable field after a coordinate-frame rotation,
+    // without copying or modifying its Fourier coefficients. This is
+    // equivalent to rotated(frameRotation).evaluate(theta), but is suitable
+    // for repeated receiver queries at different head/listener orientations.
+    std::complex<double> evaluateRotated(double theta_rad,
+                                         double frameRotation_rad) const;
 };
 
 } // namespace BellOptimizer::Acoustics

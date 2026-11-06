@@ -1,0 +1,6 @@
+cmake_minimum_required(VERSION 3.16)
+project(BellSynthesisConsumer LANGUAGES CXX)
+find_package(BellSynthesis CONFIG REQUIRED)
+add_executable(bell_synthesis_consumer main.cpp)
+target_link_libraries(bell_synthesis_consumer PRIVATE BellSynthesis::bell_synthesis)
+target_compile_features(bell_synthesis_consumer PRIVATE cxx_std_17)

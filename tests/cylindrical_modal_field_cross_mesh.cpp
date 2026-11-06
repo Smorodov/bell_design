@@ -2,7 +2,11 @@
 #include "fem/cylindrical_global_assembly.hpp"
 #include "fem/cylindrical_global_modes.hpp"
 
+#include <algorithm>
+#include <array>
 #include <cmath>
+#include <iomanip>
+#include <numeric>
 #include <iostream>
 #include <stdexcept>
 #include <vector>
@@ -100,22 +104,60 @@ int main() {
     const auto fine_modes=solve_cylindrical_global_modes(fine_system,
         clamp_lower_edge(fem_fine,fine_system.dofs_per_node),4,1200,1e-4,true);
     require(coarse_modes.converged && fine_modes.converged,"cross-mesh FEM eigensolve failed");
-    double best_fem_overlap=0.0; std::size_t best_coarse=0,best_fine=0;
-    for(std::size_t i=0;i<coarse_modes.mode_shapes.size();++i)
-        for(std::size_t j=0;j<fine_modes.mode_shapes.size();++j) {
+    // Build the complete cross-mesh overlap matrix and solve a one-to-one
+    // assignment. Picking the best pair independently can map several coarse
+    // modes to the same fine mode and hide mode swaps near close frequencies.
+    constexpr std::size_t mode_count = 4;
+    require(coarse_modes.mode_shapes.size() >= mode_count && fine_modes.mode_shapes.size() >= mode_count,
+            "cross-mesh FEM solve returned too few modes for assignment audit");
+    double scores[mode_count][mode_count]{};
+    for(std::size_t i=0;i<mode_count;++i) {
+        for(std::size_t j=0;j<mode_count;++j) {
             const CylindricalModalField ca{&fem_coarse,&fem_harmonics,&coarse_modes.mode_shapes[i],q,density};
             const CylindricalModalField fb{&fem_fine,&fem_harmonics,&fine_modes.mode_shapes[j],q,density};
             const auto ov=compare_cylindrical_modal_fields(ca,fb,64,0.98);
-            if(ov.valid && ov.normalized_overlap>best_fem_overlap) {
-                best_fem_overlap=ov.normalized_overlap; best_coarse=i; best_fine=j;
-            }
+            require(ov.valid,"cross-mesh overlap matrix contains invalid comparison");
+            scores[i][j]=ov.normalized_overlap;
         }
-    require(best_fem_overlap>0.70,"real FEM modal field did not continue across mesh refinement");
+    }
+    std::array<std::size_t,mode_count> assignment{};
+    std::iota(assignment.begin(),assignment.end(),0u);
+    std::array<std::size_t,mode_count> best_assignment=assignment;
+    double best_total=-1.0;
+    do {
+        double total=0.0;
+        for(std::size_t i=0;i<mode_count;++i) total+=scores[i][assignment[i]];
+        if(total>best_total) { best_total=total; best_assignment=assignment; }
+    } while(std::next_permutation(assignment.begin(),assignment.end()));
+    double minimum_assigned_overlap=1.0;
+    for(std::size_t i=0;i<mode_count;++i)
+        minimum_assigned_overlap=std::min(minimum_assigned_overlap,scores[i][best_assignment[i]]);
+    require(minimum_assigned_overlap>0.70,
+            "one-to-one modal assignment failed the minimum cross-mesh overlap gate");
+
+    // Compare the first two-dimensional family as a subspace as well. This
+    // remains meaningful when two close eigenvectors rotate inside their
+    // nearly degenerate invariant subspace.
+    const std::vector<CylindricalModalField> coarse_pair{
+        {&fem_coarse,&fem_harmonics,&coarse_modes.mode_shapes[0],q,density},
+        {&fem_coarse,&fem_harmonics,&coarse_modes.mode_shapes[1],q,density}};
+    const std::vector<CylindricalModalField> fine_pair{
+        {&fem_fine,&fem_harmonics,&fine_modes.mode_shapes[best_assignment[0]],q,density},
+        {&fem_fine,&fem_harmonics,&fine_modes.mode_shapes[best_assignment[1]],q,density}};
+    double pair_coverage=0.0;
+    const double fem_pair_similarity=cylindrical_modal_subspace_similarity(
+        coarse_pair,fine_pair,64,0.98,&pair_coverage);
+    require(pair_coverage>0.98,"cross-mesh FEM family comparison has insufficient common domain");
+    require(fem_pair_similarity>0.70,"two-dimensional FEM family did not continue across mesh refinement");
 
     std::cout<<"cross_mesh_overlap="<<overlap.normalized_overlap
              <<" common_volume="<<overlap.common_volume_fraction
              <<" subspace="<<pair<<" clipped_coverage="<<mismatch.common_volume_fraction
-             <<" fem_best_overlap="<<best_fem_overlap<<" fem_modes="<<best_coarse<<","<<best_fine<<'\n';
+             <<" fem_assignment_min="<<minimum_assigned_overlap
+             <<" fem_pair_subspace="<<fem_pair_similarity
+             <<" assignment=";
+    for(std::size_t i=0;i<mode_count;++i) std::cout<<(i?",":"")<<i<<"->"<<best_assignment[i];
+    std::cout<<'\n';
     std::cout<<"cylindrical_modal_field_cross_mesh: PASS\n";
     return 0;
 }

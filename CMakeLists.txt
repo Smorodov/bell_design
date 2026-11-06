@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.16)
-project(BellOptimizer VERSION 1.2.140 LANGUAGES CXX)
+project(BellOptimizer VERSION 1.2.183 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -41,16 +41,84 @@ add_library(bell_core STATIC
     src/fem/internal_modal_solver.cpp
     src/excitation/localized_strike.cpp
     src/excitation/modal_impulse_response.cpp
+    src/excitation/modal_decay.cpp
     src/excitation/hammer_contact.cpp
     src/excitation/internal_clapper_geometry.cpp
     src/excitation/clapper_dynamics.cpp
+    src/excitation/clapper_modal_evaluator.cpp
+    src/excitation/clapper_modal_state_provider.cpp
+    src/excitation/clapper_acoustic_objective.cpp
     src/excitation/meridional_influence.cpp
     src/acoustics/acoustic_directional_field.cpp
+    src/acoustics/directional_radiation.cpp
+    src/acoustics/acoustic_field_cache.cpp
+    src/acoustics/bell_modal_profile.cpp
+    src/audio/wav_writer.cpp
+    src/audio/modal_pressure_synthesis.cpp
+    src/acoustics/listener_geometry.cpp
+    src/acoustics/finite_distance_radiation.cpp
     src/ccx/ccx_solver.cpp
     src/ccx/ccx_input_writer.cpp
 )
 target_include_directories(bell_core PUBLIC ${BELL_SRC} ${BELL_CORE_SRC})
 target_compile_definitions(bell_core PRIVATE BELL_CCX_EXECUTABLE="${CCX_EXECUTABLE}")
+
+# Standalone synthesis SDK. This target deliberately excludes optimizer, FEM,
+# mesh generation, CalculiX integration and command-line application code.
+add_library(bell_synthesis
+    src/excitation/internal_clapper_geometry.cpp
+    src/excitation/clapper_dynamics.cpp
+    src/excitation/clapper_modal_evaluator.cpp
+    src/acoustics/acoustic_directional_field.cpp
+    src/acoustics/directional_radiation.cpp
+    src/acoustics/acoustic_field_cache.cpp
+    src/acoustics/bell_modal_profile.cpp
+    src/acoustics/listener_geometry.cpp
+    src/acoustics/finite_distance_radiation.cpp
+    src/audio/modal_pressure_synthesis.cpp
+    src/audio/wav_writer.cpp
+)
+add_library(BellSynthesis::bell_synthesis ALIAS bell_synthesis)
+target_include_directories(bell_synthesis PUBLIC
+    $<BUILD_INTERFACE:${BELL_SRC}>
+    $<INSTALL_INTERFACE:include/bell_synthesis>
+)
+target_compile_features(bell_synthesis PUBLIC cxx_std_17)
+set_target_properties(bell_synthesis PROPERTIES POSITION_INDEPENDENT_CODE ON WINDOWS_EXPORT_ALL_SYMBOLS ON)
+target_compile_definitions(bell_synthesis PUBLIC BELL_SYNTHESIS_VERSION="${PROJECT_VERSION}")
+if(MSVC)
+    target_compile_options(bell_synthesis PRIVATE /W4)
+else()
+    target_compile_options(bell_synthesis PRIVATE -Wall -Wextra -Wpedantic)
+endif()
+
+include(GNUInstallDirs)
+include(CMakePackageConfigHelpers)
+install(TARGETS bell_synthesis EXPORT BellSynthesisTargets
+    ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
+    LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
+    RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+)
+install(FILES
+    src/core/bell_types.h
+    src/core/modal_types.hpp
+    DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/bell_synthesis/core
+)
+install(DIRECTORY src/acoustics/ DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/bell_synthesis/acoustics
+    FILES_MATCHING PATTERN "*.hpp")
+install(DIRECTORY src/excitation/ DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/bell_synthesis/excitation
+    FILES_MATCHING PATTERN "clapper_dynamics.hpp" PATTERN "clapper_modal_evaluator.hpp" PATTERN "internal_clapper_geometry.hpp")
+install(DIRECTORY src/audio/ DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/bell_synthesis/audio
+    FILES_MATCHING PATTERN "*.hpp")
+install(EXPORT BellSynthesisTargets NAMESPACE BellSynthesis:: DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/BellSynthesis)
+configure_package_config_file(cmake/BellSynthesisConfig.cmake.in
+    ${CMAKE_CURRENT_BINARY_DIR}/BellSynthesisConfig.cmake
+    INSTALL_DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/BellSynthesis)
+write_basic_package_version_file(${CMAKE_CURRENT_BINARY_DIR}/BellSynthesisConfigVersion.cmake
+    VERSION ${PROJECT_VERSION} COMPATIBILITY SameMajorVersion)
+install(FILES ${CMAKE_CURRENT_BINARY_DIR}/BellSynthesisConfig.cmake
+              ${CMAKE_CURRENT_BINARY_DIR}/BellSynthesisConfigVersion.cmake
+    DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/BellSynthesis)
 
 if(MSVC)
     target_compile_options(bell_core PRIVATE /W4)
@@ -69,10 +137,20 @@ add_executable(bell
 target_include_directories(bell PRIVATE ${BELL_SRC} ${BELL_CORE_SRC} ${BELL_SRC}/synthesis)
 target_link_libraries(bell PRIVATE bell_core)
 target_compile_definitions(bell PRIVATE BELL_VERSION="${PROJECT_VERSION}")
+if(MSVC)
+    target_compile_options(bell PRIVATE /W4)
+else()
+    target_compile_options(bell PRIVATE -Wall -Wextra -Wpedantic)
+endif()
 
 
 if(BUILD_SMOKE_TESTS)
     enable_testing()
+
+    # This contract links ONLY the distributable synthesis SDK target.
+    add_executable(synthesis_sdk_link_contract tests/synthesis_sdk_link_contract.cpp)
+    target_link_libraries(synthesis_sdk_link_contract PRIVATE BellSynthesis::bell_synthesis)
+    add_test(NAME synthesis_sdk_link_contract COMMAND synthesis_sdk_link_contract)
 
     # Experimental diagnostics are deliberately kept out of the production library.
     add_library(bell_experimental STATIC
@@ -96,6 +174,12 @@ if(BUILD_SMOKE_TESTS)
     else()
         target_compile_options(bell_experimental PRIVATE -Wall -Wextra -Wpedantic)
     endif()
+
+    add_executable(wav_writer_contract tests/wav_writer_contract.cpp)
+    target_link_libraries(wav_writer_contract PRIVATE bell_core)
+
+    add_executable(directional_radiation_equivalence tests/directional_radiation_equivalence.cpp)
+    target_link_libraries(directional_radiation_equivalence PRIVATE bell_core)
 
     add_executable(cylindrical_axis_regularity_contract tests/cylindrical_axis_regularity_contract.cpp)
     target_link_libraries(cylindrical_axis_regularity_contract PRIVATE bell_core)
@@ -155,6 +239,9 @@ if(BUILD_SMOKE_TESTS)
     add_executable(modal_objective_convergence tests/modal_objective_convergence.cpp)
     target_link_libraries(modal_objective_convergence PRIVATE bell_core)
 
+    add_executable(multifidelity_calibration_probe tests/multifidelity_calibration_probe.cpp)
+    target_link_libraries(multifidelity_calibration_probe PRIVATE bell_core)
+
     add_executable(modal_family_tracking tests/modal_family_tracking.cpp)
     target_link_libraries(modal_family_tracking PRIVATE bell_core)
 
@@ -189,6 +276,29 @@ if(BUILD_SMOKE_TESTS)
 
     add_executable(rotational_excitation_contract tests/rotational_excitation_contract.cpp)
     add_executable(acoustic_directional_field_rotation_contract tests/acoustic_directional_field_rotation_contract.cpp)
+    add_executable(stereo_listener_geometry_contract tests/stereo_listener_geometry_contract.cpp)
+    add_executable(stereo_coordinate_covariance_contract tests/stereo_coordinate_covariance_contract.cpp)
+    add_executable(clapper_stereo_frame_covariance_contract tests/clapper_stereo_frame_covariance_contract.cpp)
+    add_executable(stereo_polar_angle_approximation_contract tests/stereo_polar_angle_approximation_contract.cpp)
+    add_executable(polar_directional_field_interpolation_contract tests/polar_directional_field_interpolation_contract.cpp)
+    add_executable(finite_distance_radiation_contract tests/finite_distance_radiation_contract.cpp)
+    add_executable(finite_distance_real_fem_contract tests/finite_distance_real_fem_contract.cpp)
+    add_executable(real_fem_polar_interpolation_contract tests/real_fem_polar_interpolation_contract.cpp)
+    add_executable(acoustic_field_cache_contract tests/acoustic_field_cache_contract.cpp)
+    add_executable(bell_modal_profile_contract tests/bell_modal_profile_contract.cpp)
+    target_link_libraries(bell_modal_profile_contract PRIVATE bell_core)
+    add_executable(stereo_phase_delay_contract tests/stereo_phase_delay_contract.cpp)
+    target_link_libraries(stereo_phase_delay_contract PRIVATE bell_core)
+    target_link_libraries(acoustic_field_cache_contract PRIVATE bell_core)
+    target_link_libraries(finite_distance_real_fem_contract PRIVATE bell_core)
+    target_link_libraries(real_fem_polar_interpolation_contract PRIVATE bell_core)
+    target_link_libraries(finite_distance_radiation_contract PRIVATE bell_core)
+    target_link_libraries(stereo_listener_geometry_contract PRIVATE bell_core)
+    target_include_directories(stereo_coordinate_covariance_contract PRIVATE ${BELL_SRC} ${BELL_CORE_SRC})
+    target_link_libraries(stereo_coordinate_covariance_contract PRIVATE bell_core)
+    target_link_libraries(clapper_stereo_frame_covariance_contract PRIVATE bell_core)
+    target_link_libraries(stereo_polar_angle_approximation_contract PRIVATE bell_core)
+    target_link_libraries(polar_directional_field_interpolation_contract PRIVATE bell_core)
     target_include_directories(acoustic_directional_field_rotation_contract PRIVATE ${BELL_SRC} ${BELL_CORE_SRC})
     target_link_libraries(acoustic_directional_field_rotation_contract PRIVATE bell_core)
     add_executable(excitation_model_audit tests/excitation_model_audit.cpp)
@@ -202,6 +312,10 @@ if(BUILD_SMOKE_TESTS)
     add_executable(modal_impulse_response_contract tests/modal_impulse_response_contract.cpp)
     target_link_libraries(modal_impulse_response_contract PRIVATE bell_core)
     add_test(NAME modal_impulse_response_contract COMMAND modal_impulse_response_contract)
+
+    add_executable(modal_decay_contract tests/modal_decay_contract.cpp)
+    target_link_libraries(modal_decay_contract PRIVATE bell_core)
+    add_test(NAME modal_decay_contract COMMAND modal_decay_contract)
 
     add_executable(localized_strike_mesh_convergence tests/localized_strike_mesh_convergence.cpp)
     target_link_libraries(localized_strike_mesh_convergence PRIVATE bell_core)
@@ -321,11 +435,26 @@ if(BUILD_SMOKE_TESTS)
     add_test(NAME acoustic_amplitude_contract COMMAND acoustic_amplitude_contract)
     add_test(NAME rotational_excitation_contract COMMAND rotational_excitation_contract)
     add_test(NAME acoustic_directional_field_rotation_contract COMMAND acoustic_directional_field_rotation_contract)
+    add_test(NAME directional_radiation_equivalence COMMAND directional_radiation_equivalence)
+    add_test(NAME wav_writer_contract COMMAND wav_writer_contract)
+    add_test(NAME stereo_listener_geometry_contract COMMAND stereo_listener_geometry_contract)
+    add_test(NAME stereo_coordinate_covariance_contract COMMAND stereo_coordinate_covariance_contract)
+    add_test(NAME clapper_stereo_frame_covariance_contract COMMAND clapper_stereo_frame_covariance_contract)
+    add_test(NAME stereo_polar_angle_approximation_contract COMMAND stereo_polar_angle_approximation_contract)
+    add_test(NAME polar_directional_field_interpolation_contract COMMAND polar_directional_field_interpolation_contract)
+    add_test(NAME finite_distance_radiation_contract COMMAND finite_distance_radiation_contract)
+    add_test(NAME finite_distance_real_fem_contract COMMAND finite_distance_real_fem_contract)
+    add_test(NAME real_fem_polar_interpolation_contract COMMAND real_fem_polar_interpolation_contract)
+    add_test(NAME acoustic_field_cache_contract COMMAND acoustic_field_cache_contract)
+    add_test(NAME bell_modal_profile_contract COMMAND bell_modal_profile_contract)
+    add_test(NAME stereo_phase_delay_contract COMMAND stereo_phase_delay_contract)
     add_test(NAME excitation_model_audit COMMAND excitation_model_audit)
     add_test(NAME localized_strike_spectrum_audit COMMAND localized_strike_spectrum_audit)
     add_test(NAME localized_strike_direction_contract COMMAND localized_strike_direction_contract)
     add_test(NAME circular_localized_strike_projection COMMAND circular_localized_strike_projection)
     add_test(NAME cylindrical_axis_regularity_contract COMMAND cylindrical_axis_regularity_contract)
+    add_test(NAME multifidelity_calibration_probe COMMAND multifidelity_calibration_probe)
+    set_tests_properties(multifidelity_calibration_probe PROPERTIES TIMEOUT 300)
     add_test(NAME direct_elliptical_fem_evaluation COMMAND direct_elliptical_fem_evaluation)
     add_test(NAME localized_strike_mesh_convergence COMMAND localized_strike_mesh_convergence)
     add_test(NAME inner_normal_offset_contract COMMAND inner_normal_offset_contract)
@@ -374,6 +503,22 @@ if(BUILD_SMOKE_TESTS)
     add_executable(clapper_dynamics_contract tests/clapper_dynamics_contract.cpp)
     target_link_libraries(clapper_dynamics_contract PRIVATE bell_core)
     add_test(NAME clapper_dynamics_contract COMMAND clapper_dynamics_contract)
+
+    add_executable(clapper_modal_evaluator_contract tests/clapper_modal_evaluator_contract.cpp)
+    target_link_libraries(clapper_modal_evaluator_contract PRIVATE bell_core)
+    add_test(NAME clapper_modal_evaluator_contract COMMAND clapper_modal_evaluator_contract)
+
+    add_executable(clapper_candidate_data_reuse_contract tests/clapper_candidate_data_reuse_contract.cpp)
+    target_link_libraries(clapper_candidate_data_reuse_contract PRIVATE bell_core)
+    add_test(NAME clapper_candidate_data_reuse_contract COMMAND clapper_candidate_data_reuse_contract)
+    add_executable(clapper_acoustic_objective_contract tests/clapper_acoustic_objective_contract.cpp)
+    target_link_libraries(clapper_acoustic_objective_contract PRIVATE bell_core)
+    add_test(NAME clapper_acoustic_objective_contract COMMAND clapper_acoustic_objective_contract)
+
+    add_executable(clapper_modal_spectrum_family_audit tests/clapper_modal_spectrum_family_audit.cpp)
+    target_link_libraries(clapper_modal_spectrum_family_audit PRIVATE bell_core)
+    add_test(NAME clapper_modal_spectrum_family_audit COMMAND clapper_modal_spectrum_family_audit)
+    set_tests_properties(clapper_modal_spectrum_family_audit PROPERTIES TIMEOUT 180)
     add_test(NAME contact_directional_audio_smoke COMMAND $<TARGET_FILE:bell> synth-contact
         "${CMAKE_CURRENT_SOURCE_DIR}/bells/best_geometry.json"
         --output "${CMAKE_BINARY_DIR}/contact_directional_smoke.wav"

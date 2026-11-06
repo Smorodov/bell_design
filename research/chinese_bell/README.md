@@ -1,75 +1,18 @@
 # Chinese-bell research module
 
-This directory is a **detached research branch** for the Chinese two-tone bell investigation.
+This module is isolated experimental work. It is excluded from normal builds and is not connected to the Western production optimizer.
 
-It is intentionally excluded from the normal BellOptimizer build. The production project does not compile or link this module unless `BUILD_CHINESE_RESEARCH=ON` is explicitly requested.
+Enable explicitly with `-DBUILD_CHINESE_RESEARCH=ON` only when working on the research branch.
 
-## Why it is detached
+## Current status
 
-The investigation established useful numerical machinery, but the current reduced FEM does not reproduce the physically documented Chinese `(m,n)a/(m,n)b` modal-family mechanism with sufficient confidence.
+`RESEARCH_BLOCKED`: the reduced model has not established the physical paired modal family and reciprocal A/B strike selectivity required by the documented two-tone mechanism. Do not use frequency rank, tracker tuning or arbitrary contact-width sweeps as substitutes.
 
-Keeping the code here has two purposes:
+## Maintained records
 
-1. preserve the work so another researcher can continue without restarting from zero;
-2. prevent unresolved experimental assumptions from becoming part of the normal production build.
+- `docs/CHINESE_BELL_STATUS.md` — current decision and durable findings.
+- `docs/CHINESE_TWO_TONE_CONSOLIDATED_AUDIT.md` — physical/numerical findings and negative results.
+- `docs/CHINESE_BELL_ACOUSTIC_CANON.md` — historical/acoustic target, separate from mathematical surrogates.
+- `docs/CHINESE_BELL_LITERATURE.md` — bibliography and literature notes.
 
-The correct interpretation is **research infrastructure, not a production feature**.
-
-## What is preserved
-
-- corrected non-axisymmetric surface-normal strike integration;
-- finite-contact surface metric handling;
-- temporal impulse diagnostic;
-- modal-family/subspace continuation experiments;
-- modal topology diagnostics;
-- Chinese two-tone objective experiments;
-- all focused Chinese research contracts and regression tests;
-- consolidated scientific conclusions and literature references.
-
-## What is deliberately not claimed
-
-The current module does not establish:
-
-- a physical `(m,n)a/(m,n)b` modal family;
-- robust reciprocal `A/B` strike selectivity;
-- a production Chinese-bell frequency target;
-- a validated Chinese acoustic/radiation/damping objective;
-- a physical striker/contact law;
-- historical authenticity of the reduced model.
-
-## Build
-
-Normal BellOptimizer builds do **not** compile this directory.
-
-To explicitly build the research module from the project root:
-
-```sh
-cmake -S . -B build-chinese -DCMAKE_BUILD_TYPE=Release -DBUILD_CHINESE_RESEARCH=ON
-cmake --build build-chinese --parallel
-ctest --test-dir build-chinese --output-on-failure
-```
-
-The module consumes the normal `bell_core` target. It does not modify that target with Chinese-specific sources.
-
-## Reopening the research
-
-Read these documents first:
-
-1. `docs/CHINESE_RESEARCH_HANDOFF_1.2.126.md`
-2. `docs/CHINESE_TWO_TONE_CONSOLIDATED_AUDIT.md`
-3. `docs/CHINESE_MODAL_TOPOLOGY_AUDIT.md`
-4. `docs/CHINESE_MODAL_FAMILY_CONTRACT.md`
-5. `docs/CHINESE_BELL_LITERATURE.md`
-
-Do not start by tuning tracker thresholds, ellipticity, contact width, or frequency windows. The documented failure modes are precisely the traps this separation is intended to prevent.
-
-## Reusable ideas for the main project
-
-The detached code is not a dead end. Its numerical work can be reviewed independently for reuse in the production circular/elliptic bell path, especially:
-
-- exact surface metrics;
-- local surface-normal generalized forces;
-- subspace rather than frequency-rank continuation;
-- full-field modal comparison.
-
-Such reuse must be re-derived against the production mechanism rather than copied wholesale.
+The source and contract tests in this directory remain isolated for possible future research. They are not part of the normal validation suite.

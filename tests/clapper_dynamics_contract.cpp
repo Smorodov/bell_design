@@ -41,6 +41,9 @@ int main() {
                 "pendulum did not complete a contact and release");
         require(result.contact_occurred, "contact event was not recorded");
         require(result.peak_contact_force_n > 0.0, "contact force is not positive");
+        require(std::abs(result.first_contact_surface_r_m - 0.30) < 1.0e-9 &&
+                result.first_contact_surface_z_m >= 0.0 && result.first_contact_surface_z_m <= 1.0,
+                "first-contact surface coordinates were not recorded on the inner wall");
         require(result.contact_duration_seconds > 0.0 && result.contact_duration_seconds < 0.02,
                 "contact duration is outside the expected short-impact range");
         require(result.maximum_relative_energy_error < 2.0e-4,

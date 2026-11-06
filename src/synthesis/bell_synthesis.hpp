@@ -130,7 +130,6 @@ private:
     void normalize(double peak_level);
     void trim_silence(double threshold);
     
-    void write_wav_header(std::ofstream& file, int data_size) const;
     
     SynthesisConfig config_;
     std::vector<Mode> modes_;

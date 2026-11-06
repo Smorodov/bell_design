@@ -37,8 +37,20 @@ int main() {
     if (report.minimum_similarity < 0.999 || report.mean_similarity < 0.999) return 3;
     if (report.ambiguous) return 4;
 
+    // A two-dimensional eigenspace must be invariant to an arbitrary
+    // orthogonal rotation of its basis (the common near-degenerate case).
+    const std::vector<std::vector<double>> basis{{1,0,0,0}, {0,1,0,0}};
+    const double c = std::cos(0.731), sn = std::sin(0.731);
+    const std::vector<std::vector<double>> rotated{{c,sn,0,0}, {-sn,c,0,0}};
+    const double subspace = boundaryTraceSubspaceSimilarity(basis, rotated);
+    if (subspace < 0.999999) return 5;
+    const std::vector<std::vector<double>> unrelated{{0,0,1,0}, {0,0,0,1}};
+    if (boundaryTraceSubspaceSimilarity(basis, unrelated) > 1e-8) return 6;
+    if (boundaryTraceSubspaceSimilarity(basis, {{1,0,0,0},{2,0,0,0}}) >= 0.0) return 7;
+
     std::cout << "modal_family_tracking: PASS"
               << " min_similarity=" << report.minimum_similarity
-              << " mean_similarity=" << report.mean_similarity << "\n";
+              << " mean_similarity=" << report.mean_similarity
+              << " subspace_similarity=" << subspace << "\n";
     return 0;
 }

@@ -28,6 +28,9 @@ struct ClapperDynamicsResult {
     double first_contact_time_seconds = 0.0;
     double separation_time_seconds = 0.0;
     double peak_contact_force_n = 0.0;
+    // First-contact point on the undeformed inner meridian (SI coordinates).
+    double first_contact_surface_r_m = 0.0;
+    double first_contact_surface_z_m = 0.0;
     double initial_energy_joules = 0.0;
     double final_energy_joules = 0.0;
     double maximum_relative_energy_error = 0.0;

@@ -583,26 +583,6 @@ double EvolutionaryOptimizer::evaluateCandidate(BellGeometry& geometry, ModalDat
         return 1e9;
     }
 
-    // Modal identity must not be inferred from frequency rank alone. During
-    // geometry optimization two eigenfrequencies can cross; the physical
-    // family is then better represented by the displacement shape. The
-    // reference is established from the first valid solve (or from a loaded
-    // best result) and remains fixed during the run.
-    if (!has_modal_reference_) {
-        modal_reference_ = raw_data;
-        has_modal_reference_ = !modal_reference_.modes.empty();
-    } else {
-        const auto tracking = trackModalFamilies(modal_reference_, raw_data);
-        if (tracking.used_shape_tracking && tracking.ambiguous) {
-            // Do not reject a physically valid candidate merely because a pair
-            // is near-degenerate. Record the diagnostic and let the objective
-            // continue with the best available assignment.
-            std::cout << "   ⚠️ Modal-family tracking: near-degenerate/ambiguous pair, "
-                      << "min shape similarity=" << std::fixed << std::setprecision(3)
-                      << tracking.minimum_similarity << "\n" << std::defaultfloat;
-        }
-    }
-    
     // ============================================================
     // ЭТАП 3: РЕЗУЛЬТАТ МОДАЛЬНОГО РЕШЕЛЯ
     // ============================================================
@@ -651,7 +631,25 @@ double EvolutionaryOptimizer::evaluateCandidate(BellGeometry& geometry, ModalDat
         }
         raw_data.sort_by_frequency();
     }
-    
+    // Track modal identity only after the selected geometry path has produced
+    // its final modal set. Earlier tracking was silently undone by the direct
+    // elliptical FEM replacement and by the legacy morph's frequency sort.
+    // The reference is established from the first valid transformed solve and
+    // remains fixed during this optimization run.
+    if (!has_modal_reference_) {
+        modal_reference_ = raw_data;
+        has_modal_reference_ = !modal_reference_.modes.empty();
+    } else {
+        const auto tracking = trackModalFamilies(modal_reference_, raw_data);
+        if (tracking.used_shape_tracking && tracking.ambiguous) {
+            // Keep a physically valid candidate, but make the assignment
+            // uncertainty visible instead of silently treating rank as identity.
+            std::cout << "   ⚠️ Modal-family tracking: near-degenerate/ambiguous pair, "
+                      << "min shape similarity=" << std::fixed << std::setprecision(3)
+                      << tracking.minimum_similarity << "\n" << std::defaultfloat;
+        }
+    }
+
     double prime_freq = 0.0;
     if (raw_data.modes.size() > 1) {
         prime_freq = raw_data.modes[1].frequency_hz;
