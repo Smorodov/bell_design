@@ -12,6 +12,9 @@
 #include "../excitation/meridional_influence.hpp"
 #include "../math/modal_coordinate_morphing.hpp"
 #include "../fem/cylindrical_modal_evaluator.hpp"
+#include "../fem/cylindrical_bell_model.hpp"
+#include "../excitation/localized_strike.hpp"
+#include "../../research/round_bell_audit/round_bell_candidate_analysis.hpp"
 
 // ============================================================
 // СТРУКТУРА ДЛЯ СОХРАНЕНИЯ РЕЗУЛЬТАТА
@@ -631,6 +634,61 @@ double EvolutionaryOptimizer::evaluateCandidate(BellGeometry& geometry, ModalDat
         }
         raw_data.sort_by_frequency();
     }
+    // Optional circular-bell integration side channel. This direct FEM solve
+    // is deliberately diagnostic-only: it does not replace raw_data and never
+    // contributes to the production objective until modal mapping is validated.
+    if (evo_params_.enable_round_fem_diagnostics &&
+        std::abs(geometry.ellipticity - 1.0) <= 1.0e-12) {
+        try {
+            const auto fem_model = FEM::make_cylindrical_bell_model(geometry, material_, config);
+            FEM::CylindricalModalEvaluationConfig fem_config;
+            fem_config.harmonics = {0, 1, 2, 3};
+            fem_config.angular_samples = 64;
+            fem_config.requested_modes = 18;
+            fem_config.max_iterations = 1600;
+            fem_config.tolerance = 1.0e-6;
+            fem_config.minimum_frequency_hz = BellConstants::MIN_FREQ_HZ;
+            Excitation::MeridionalInfluence fem_influence;
+            ModalData diagnostic_modes;
+            if (!FEM::evaluate_cylindrical_bell_modes(
+                    fem_model, fem_influence.make(fem_model.mesh_si), fem_config, diagnostic_modes)) {
+                std::cerr << "[round-fem-diagnostics] direct FEM solve failed; production candidate unchanged\n";
+            } else {
+                double z_min = fem_model.mesh_si.outer_profile.front().z;
+                double z_max = z_min;
+                for (const auto& point : fem_model.mesh_si.outer_profile) {
+                    z_min = std::min(z_min, point.z);
+                    z_max = std::max(z_max, point.z);
+                }
+                Excitation::CircularLocalizedStrikeConfig strike;
+                strike.center_z = z_min + 0.70 * (z_max - z_min);
+                strike.meridional_sigma = 0.012;
+                strike.circumferential_sigma = 0.008;
+                Research::ModalFamilyAdapterConfig adapter_config;
+                Research::RoundBellCandidateAnalysis analysis;
+                if (!Research::analyzeRoundBellCandidate(
+                        fem_model.mesh_si, diagnostic_modes, strike, adapter_config, analysis)) {
+                    std::cerr << "[round-fem-diagnostics] modal/strike analysis rejected; production candidate unchanged\n";
+                } else {
+                    std::ofstream diagnostic_csv(evo_params_.round_fem_diagnostics_csv, std::ios::app);
+                    if (diagnostic_csv) {
+                        if (diagnostic_csv.tellp() == std::streampos(0))
+                            diagnostic_csv << "H_mm,R_mouth_mm,ellipticity,mode_count,family_count,max_abs_strike_projection\n";
+                        diagnostic_csv << std::setprecision(12) << geometry.H << ',' << geometry.R_mouth << ','
+                                       << geometry.ellipticity << ',' << diagnostic_modes.modes.size() << ','
+                                       << analysis.modal_families.size() << ','
+                                       << analysis.maximum_absolute_strike_projection << '\n';
+                    } else {
+                        std::cerr << "[round-fem-diagnostics] cannot open CSV; production candidate unchanged\n";
+                    }
+                }
+            }
+        } catch (const std::exception& error) {
+            std::cerr << "[round-fem-diagnostics] " << error.what()
+                      << "; production candidate unchanged\n";
+        }
+    }
+
     // Track modal identity only after the selected geometry path has produced
     // its final modal set. Earlier tracking was silently undone by the direct
     // elliptical FEM replacement and by the legacy morph's frequency sort.

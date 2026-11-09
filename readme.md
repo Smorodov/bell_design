@@ -1,4 +1,4 @@
-# BellOptimizer 1.2.177
+# BellOptimizer 1.2.184
 
 BellOptimizer is a C++17 application for bell geometry optimization, modal analysis and audio synthesis. The structural engine uses a meridional Q4 mesh and reduced cylindrical/Fourier formulations; it is **not** a full 3-D production FEM package.
 

@@ -1,0 +1,50 @@
+[  7%] Building CXX object CMakeFiles/bell_core.dir/src/core/bell_generator.cpp.o
+[  7%] Building CXX object CMakeFiles/bell_core.dir/src/core/bell_material.cpp.o
+[  7%] Building CXX object CMakeFiles/bell_core.dir/src/core/bell_optimizer.cpp.o
+[ 14%] Building CXX object CMakeFiles/bell_core.dir/src/core/modal_tracking.cpp.o
+[ 14%] Building CXX object CMakeFiles/bell_core.dir/research/round_bell_audit/modal_family_adapter.cpp.o
+[ 21%] Building CXX object CMakeFiles/bell_core.dir/research/round_bell_audit/round_bell_candidate_analysis.cpp.o
+[ 21%] Building CXX object CMakeFiles/bell_core.dir/src/models/bell_model_profile.cpp.o
+[ 21%] Building CXX object CMakeFiles/bell_core.dir/src/math/coordinate_morphing.cpp.o
+[ 28%] Building CXX object CMakeFiles/bell_core.dir/src/math/modal_coordinate_morphing.cpp.o
+[ 28%] Building CXX object CMakeFiles/bell_core.dir/src/math/cylindrical_strain.cpp.o
+[ 28%] Building CXX object CMakeFiles/bell_core.dir/src/fem/cylindrical_q4_element.cpp.o
+[ 35%] Building CXX object CMakeFiles/bell_core.dir/src/fem/cylindrical_global_assembly.cpp.o
+[ 35%] Building CXX object CMakeFiles/bell_core.dir/src/fem/cylindrical_global_modes.cpp.o
+[ 35%] Building CXX object CMakeFiles/bell_core.dir/src/fem/cylindrical_bell_model.cpp.o
+[ 42%] Building CXX object CMakeFiles/bell_core.dir/src/fem/cylindrical_modal_evaluator.cpp.o
+[ 42%] Building CXX object CMakeFiles/bell_core.dir/src/fem/cylindrical_modal_tracking.cpp.o
+[ 42%] Building CXX object CMakeFiles/bell_core.dir/src/fem/internal_modal_solver.cpp.o
+[ 50%] Building CXX object CMakeFiles/bell_core.dir/src/excitation/localized_strike.cpp.o
+[ 50%] Building CXX object CMakeFiles/bell_core.dir/src/excitation/modal_impulse_response.cpp.o
+[ 57%] Building CXX object CMakeFiles/bell_core.dir/src/excitation/modal_decay.cpp.o
+[ 57%] Building CXX object CMakeFiles/bell_core.dir/src/excitation/hammer_contact.cpp.o
+[ 57%] Building CXX object CMakeFiles/bell_core.dir/src/excitation/internal_clapper_geometry.cpp.o
+[ 64%] Building CXX object CMakeFiles/bell_core.dir/src/excitation/clapper_dynamics.cpp.o
+[ 64%] Building CXX object CMakeFiles/bell_core.dir/src/excitation/clapper_modal_evaluator.cpp.o
+[ 64%] Building CXX object CMakeFiles/bell_core.dir/src/excitation/clapper_modal_state_provider.cpp.o
+[ 71%] Building CXX object CMakeFiles/bell_core.dir/src/excitation/clapper_acoustic_objective.cpp.o
+[ 71%] Building CXX object CMakeFiles/bell_core.dir/src/excitation/meridional_influence.cpp.o
+[ 71%] Building CXX object CMakeFiles/bell_core.dir/src/acoustics/acoustic_directional_field.cpp.o
+[ 78%] Building CXX object CMakeFiles/bell_core.dir/src/acoustics/directional_radiation.cpp.o
+[ 78%] Building CXX object CMakeFiles/bell_core.dir/src/acoustics/acoustic_field_cache.cpp.o
+[ 78%] Building CXX object CMakeFiles/bell_core.dir/src/acoustics/bell_modal_profile.cpp.o
+[ 85%] Building CXX object CMakeFiles/bell_core.dir/src/audio/wav_writer.cpp.o
+[ 85%] Building CXX object CMakeFiles/bell_core.dir/src/audio/modal_pressure_synthesis.cpp.o
+[ 85%] Building CXX object CMakeFiles/bell_core.dir/src/acoustics/listener_geometry.cpp.o
+[ 92%] Building CXX object CMakeFiles/bell_core.dir/src/acoustics/finite_distance_radiation.cpp.o
+[ 92%] Building CXX object CMakeFiles/bell_core.dir/src/ccx/ccx_solver.cpp.o
+[100%] Building CXX object CMakeFiles/bell_core.dir/src/ccx/ccx_input_writer.cpp.o
+[100%] Linking CXX static library libbell_core.a
+[100%] Built target bell_core
+[ 93%] Built target bell_core
+[100%] Building CXX object CMakeFiles/modal_family_adapter_contract.dir/tests/modal_family_adapter_contract.cpp.o
+[100%] Building CXX object CMakeFiles/modal_family_adapter_contract.dir/research/round_bell_audit/modal_family_adapter.cpp.o
+[100%] Linking CXX executable modal_family_adapter_contract
+[100%] Built target modal_family_adapter_contract
+[ 87%] Built target bell_core
+[ 87%] Building CXX object CMakeFiles/round_optimizer_integration_probe.dir/research/round_bell_audit/modal_family_adapter.cpp.o
+[ 93%] Building CXX object CMakeFiles/round_optimizer_integration_probe.dir/research/round_bell_audit/round_optimizer_integration_probe.cpp.o
+[ 93%] Building CXX object CMakeFiles/round_optimizer_integration_probe.dir/research/round_bell_audit/round_bell_candidate_analysis.cpp.o
+[100%] Linking CXX executable round_optimizer_integration_probe
+[100%] Built target round_optimizer_integration_probe

@@ -1,0 +1,12 @@
+Internal ctest changing into directory: /mnt/data/bell_next/build_mesh_repeat
+Test project /mnt/data/bell_next/build_mesh_repeat
+    Start 24: modal_family_tracking
+    Start 73: cylindrical_strain_contract
+1/3 Test #24: modal_family_tracking ............   Passed    0.00 sec
+    Start 96: modal_state_tracker_contract
+2/3 Test #73: cylindrical_strain_contract ......   Passed    0.00 sec
+3/3 Test #96: modal_state_tracker_contract .....   Passed    0.00 sec
+
+100% tests passed, 0 tests failed out of 3
+
+Total Test time (real) =   0.01 sec

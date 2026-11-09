@@ -149,3 +149,20 @@ into assignment and has not yet been validated against full-volume mass-weighted
 overlap. Keep the multi-fidelity shortlist disabled and retain exact FEM evaluation
 for all production candidates until physical group identification, cross-metric
 validation, and shortlist-recall gates pass.
+
+
+## 1.2.184 — principal-angle invariance regression
+
+The rank-2 principal-angle contract now includes 30 deterministic basis-change
+cases (rotation, permutation, sign and scale) and 30 analytically calibrated
+principal-angle perturbations. Both sweeps passed with worst absolute error
+2.22e-16 in the GCC 14.2 Release run. The existing controlled cross-mesh FEM
+fixture also passed with minimum one-to-one overlap 0.999854 and pair-subspace
+similarity 0.999966. These results validate the numerical primitive and its
+basis invariance; they do not validate cross-solver family assignment or the
+fast/accurate ranking model. The 1.2.182 calibration result remains a blocker.
+Keep candidate rejection/shortlisting disabled and run full accurate evaluation
+for production candidates. Next gate: apply subspace evidence in the diagnostic
+cross-solver assignment, compare it with full-volume mass-weighted subspaces,
+and measure assignment stability and shortlist recall on a representative
+round-bell geometry set before considering any production integration.

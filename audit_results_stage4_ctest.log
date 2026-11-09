@@ -1,0 +1,10 @@
+Internal ctest changing into directory: /mnt/data/bell_integration_stage4/build
+Test project /mnt/data/bell_integration_stage4/build
+    Start  51: circular_localized_strike_projection
+1/2 Test  #51: circular_localized_strike_projection ...   Passed    3.54 sec
+    Start 100: modal_family_adapter_contract
+2/2 Test #100: modal_family_adapter_contract ..........   Passed    0.01 sec
+
+100% tests passed, 0 tests failed out of 2
+
+Total Test time (real) =   3.56 sec

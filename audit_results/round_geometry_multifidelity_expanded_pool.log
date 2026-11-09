@@ -1,0 +1,9 @@
+completed=10
+completed=20
+completed=30
+completed=40
+completed=50
+completed=60
+accepted_geometries=61 failures=0 ambiguous=0
+spearman_objective_rank=1 max_first5_frequency_error=8.29386e-13 min_shape_similarity=1 mean_candidate_mean_similarity=1
+scope=m0_only; same_15_node_profile_mesh; boundary_trace_modal_tracking; no_full_volume_mass_metric

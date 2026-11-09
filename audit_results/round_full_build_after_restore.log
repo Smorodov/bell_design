@@ -1,0 +1,198 @@
+[  1%] Built target sparse_eigensolver_contract
+[  2%] Built target sparse_matrix_contract
+[  7%] Built target bell_synthesis
+[  7%] Building CXX object CMakeFiles/bell_core.dir/src/core/modal_tracking.cpp.o
+[  8%] Built target rcm_initial_vector_contract
+[  9%] Built target sparse_solver_scaling
+[ 10%] Built target sparse_solver_production_contract
+[ 10%] Built target sparse_pruning_audit
+[ 11%] Built target sparse_conditioning_audit
+[ 12%] Built target rotational_reference_frame_audit
+[ 14%] Built target acoustic_pressure_contract
+[ 14%] Built target acoustic_pressure_scaling_audit
+[ 15%] Built target meridional_influence_audit
+[ 15%] Built target acoustic_amplitude_contract
+[ 16%] Built target acoustic_pressure_phase_contract
+[ 17%] Built target rotational_excitation_contract
+[ 18%] Built target excitation_model_audit
+[ 19%] Built target synthesis_sdk_link_contract
+[ 19%] Linking CXX static library libbell_core.a
+[ 32%] Built target bell_core
+[ 33%] Built target bell_experimental
+[ 34%] Linking CXX executable wav_writer_contract
+[ 34%] Linking CXX executable bell
+[ 34%] Linking CXX executable directional_radiation_equivalence
+[ 34%] Built target bell_validation
+[ 34%] Linking CXX executable cylindrical_axis_regularity_contract
+[ 34%] Built target directional_radiation_equivalence
+[ 34%] Built target cylindrical_axis_regularity_contract
+[ 34%] Built target wav_writer_contract
+[ 35%] Linking CXX executable direct_elliptical_fem_evaluation
+[ 38%] Built target bell
+[ 38%] Linking CXX executable rcm_ordering_audit
+[ 38%] Linking CXX executable matrix_assembly_audit
+[ 38%] Linking CXX executable sparse_fem_solver_audit
+[ 39%] Built target matrix_assembly_audit
+[ 40%] Built target sparse_fem_solver_audit
+[ 40%] Linking CXX executable sparse_dense_mode_comparison
+[ 40%] Built target direct_elliptical_fem_evaluation
+[ 41%] Built target rcm_ordering_audit
+[ 41%] Linking CXX executable sparse_solver_robustness
+[ 42%] Linking CXX executable rcm_solver_benchmark
+[ 42%] Linking CXX executable sparse_solver_scaling_contract
+[ 42%] Built target sparse_solver_scaling_contract
+[ 43%] Built target sparse_solver_robustness
+[ 43%] Built target sparse_dense_mode_comparison
+[ 44%] Linking CXX executable low_frequency_mode_policy
+[ 44%] Built target rcm_solver_benchmark
+[ 44%] Linking CXX executable modal_physics_validation
+[ 44%] Linking CXX executable eigenpair_integrity
+[ 44%] Linking CXX executable modal_objective_convergence
+[ 45%] Built target modal_physics_validation
+[ 45%] Built target low_frequency_mode_policy
+[ 46%] Built target eigenpair_integrity
+[ 47%] Built target modal_objective_convergence
+[ 47%] Linking CXX executable multifidelity_calibration_probe
+[ 47%] Linking CXX executable modal_family_tracking
+[ 47%] Linking CXX executable optimizer_shape_scale_audit
+[ 47%] Linking CXX executable profile_spline_convergence
+[ 48%] Built target optimizer_shape_scale_audit
+[ 49%] Built target modal_family_tracking
+[ 49%] Linking CXX executable castability_geometry_contract
+[ 49%] Built target multifidelity_calibration_probe
+[ 50%] Linking CXX executable acoustic_modal_validation
+[ 50%] Built target profile_spline_convergence
+[ 50%] Linking CXX executable acoustic_radiation_audit
+[ 50%] Linking CXX executable acoustic_multipole_audit
+[ 51%] Built target castability_geometry_contract
+[ 51%] Built target acoustic_modal_validation
+[ 51%] Linking CXX executable acoustic_directional_field_rotation_contract
+[ 51%] Linking CXX executable stereo_listener_geometry_contract
+[ 51%] Built target acoustic_multipole_audit
+[ 51%] Built target acoustic_radiation_audit
+[ 51%] Linking CXX executable stereo_coordinate_covariance_contract
+[ 51%] Linking CXX executable clapper_stereo_frame_covariance_contract
+[ 52%] Built target acoustic_directional_field_rotation_contract
+[ 53%] Built target stereo_listener_geometry_contract
+[ 54%] Linking CXX executable polar_directional_field_interpolation_contract
+[ 54%] Linking CXX executable stereo_polar_angle_approximation_contract
+[ 55%] Built target clapper_stereo_frame_covariance_contract
+[ 56%] Built target stereo_coordinate_covariance_contract
+[ 56%] Built target polar_directional_field_interpolation_contract
+[ 56%] Linking CXX executable finite_distance_radiation_contract
+[ 56%] Linking CXX executable finite_distance_real_fem_contract
+[ 56%] Linking CXX executable real_fem_polar_interpolation_contract
+[ 56%] Built target stereo_polar_angle_approximation_contract
+[ 57%] Linking CXX executable acoustic_field_cache_contract
+[ 57%] Built target finite_distance_radiation_contract
+[ 57%] Linking CXX executable bell_modal_profile_contract
+[ 57%] Built target acoustic_field_cache_contract
+[ 57%] Built target real_fem_polar_interpolation_contract
+[ 58%] Built target finite_distance_real_fem_contract
+[ 59%] Linking CXX executable stereo_phase_delay_contract
+[ 59%] Linking CXX executable localized_strike_spectrum_audit
+[ 59%] Linking CXX executable localized_strike_direction_contract
+[ 60%] Built target bell_modal_profile_contract
+[ 61%] Built target localized_strike_spectrum_audit
+[ 62%] Linking CXX executable circular_localized_strike_projection
+[ 63%] Linking CXX executable modal_impulse_response_contract
+[ 63%] Built target localized_strike_direction_contract
+[ 63%] Built target stereo_phase_delay_contract
+[ 63%] Linking CXX executable modal_decay_contract
+[ 63%] Linking CXX executable localized_strike_mesh_convergence
+[ 63%] Built target modal_impulse_response_contract
+[ 63%] Built target circular_localized_strike_projection
+[ 64%] Linking CXX executable inner_normal_offset_contract
+[ 65%] Linking CXX executable internal_fem_compare
+[ 66%] Built target localized_strike_mesh_convergence
+[ 67%] Linking CXX executable ccx_current_geometry
+[ 68%] Built target modal_decay_contract
+[ 68%] Built target inner_normal_offset_contract
+[ 68%] Linking CXX executable mesh_convergence
+[ 68%] Linking CXX executable thickness_mesh_convergence
+[ 68%] Built target ccx_current_geometry
+[ 68%] Built target internal_fem_compare
+[ 68%] Linking CXX executable input_safety_contract
+[ 68%] Linking CXX executable material_preset_contract
+[ 69%] Built target thickness_mesh_convergence
+[ 70%] Built target input_safety_contract
+[ 71%] Linking CXX executable tradition_assessment
+[ 71%] Built target mesh_convergence
+[ 72%] Linking CXX executable model_layer_contract
+[ 72%] Linking CXX executable modal_influence_contract
+[ 72%] Built target material_preset_contract
+[ 73%] Linking CXX executable coordinate_morphing_contract
+[ 73%] Built target tradition_assessment
+[ 73%] Built target model_layer_contract
+[ 73%] Linking CXX executable mechanical_coordinate_morphing_contract
+[ 74%] Built target modal_influence_contract
+[ 74%] Built target coordinate_morphing_contract
+[ 74%] Linking CXX executable coordinate_morphing_ellipticity_sweep
+[ 74%] Linking CXX executable cylindrical_strain_contract
+[ 75%] Built target mechanical_coordinate_morphing_contract
+[ 75%] Linking CXX executable cylindrical_q4_element_contract
+[ 75%] Linking CXX executable cylindrical_global_assembly_contract
+[ 76%] Built target cylindrical_strain_contract
+[ 77%] Linking CXX executable cylindrical_bell_geometry_path_contract
+[ 77%] Built target coordinate_morphing_ellipticity_sweep
+[ 78%] Built target cylindrical_global_assembly_contract
+[ 78%] Built target cylindrical_q4_element_contract
+[ 78%] Linking CXX executable cylindrical_internal_solver_compare
+[ 79%] Linking CXX executable cylindrical_global_modes_contract
+[ 79%] Linking CXX executable cylindrical_modal_family_tracking
+[ 79%] Built target cylindrical_bell_geometry_path_contract
+[ 79%] Built target cylindrical_global_modes_contract
+[ 79%] Linking CXX executable modal_subspace_similarity_contract
+[ 79%] Built target cylindrical_internal_solver_compare
+[ 79%] Linking CXX executable modal_subspace_conditioning_contract
+[ 80%] Linking CXX executable cylindrical_bell_geometry_modal_tracking
+[ 81%] Built target cylindrical_modal_family_tracking
+[ 81%] Linking CXX executable cylindrical_bell_geometry_convergence
+[ 81%] Built target modal_subspace_conditioning_contract
+[ 82%] Built target modal_subspace_similarity_contract
+[ 83%] Linking CXX executable cylindrical_harmonic_family_continuation
+[ 83%] Built target cylindrical_bell_geometry_modal_tracking
+[ 83%] Linking CXX executable cylindrical_ellipticity_convergence
+[ 83%] Linking CXX executable cylindrical_unified_ellipticity_audit
+[ 84%] Built target cylindrical_bell_geometry_convergence
+[ 84%] Linking CXX executable ellipticity_search_policy_contract
+[ 84%] Built target cylindrical_ellipticity_convergence
+[ 84%] Linking CXX executable nonaxisymmetric_reference_mesh_contract
+[ 84%] Built target cylindrical_harmonic_family_continuation
+[ 85%] Built target ellipticity_search_policy_contract
+[ 86%] Built target cylindrical_unified_ellipticity_audit
+[ 86%] Linking CXX executable hammer_contact_contract
+[ 86%] Linking CXX executable bell_core_smoke
+[ 87%] Built target nonaxisymmetric_reference_mesh_contract
+[ 87%] Linking CXX executable internal_clapper_geometry_contract
+[ 87%] Linking CXX executable inner_surface_modal_export_contract
+[ 88%] Built target hammer_contact_contract
+[ 89%] Built target internal_clapper_geometry_contract
+[ 90%] Built target bell_core_smoke
+[ 91%] Linking CXX executable clapper_dynamics_contract
+[ 91%] Linking CXX executable clapper_candidate_data_reuse_contract
+[ 92%] Linking CXX executable clapper_modal_evaluator_contract
+[ 92%] Built target inner_surface_modal_export_contract
+[ 92%] Linking CXX executable clapper_acoustic_objective_contract
+[ 92%] Built target clapper_dynamics_contract
+[ 92%] Built target clapper_modal_evaluator_contract
+[ 93%] Built target clapper_candidate_data_reuse_contract
+[ 93%] Linking CXX executable clapper_modal_spectrum_family_audit
+[ 93%] Linking CXX executable modal_tracker_fem_continuation
+[ 94%] Linking CXX executable modal_state_tracker_contract
+[ 94%] Built target clapper_modal_spectrum_family_audit
+[ 94%] Built target clapper_acoustic_objective_contract
+[ 95%] Linking CXX executable cylindrical_modal_field_cross_mesh
+[ 95%] Built target modal_state_tracker_contract
+[ 96%] Linking CXX executable cylindrical_modal_field_fem_matrix
+[ 97%] Linking CXX executable round_geometry_dataset
+[ 98%] Built target modal_tracker_fem_continuation
+[ 98%] Linking CXX executable round_geometry_modal_convergence
+[ 98%] Built target round_geometry_dataset
+[ 98%] Linking CXX executable round_geometry_multifidelity_probe
+[ 98%] Built target cylindrical_modal_field_fem_matrix
+[ 98%] Built target cylindrical_modal_field_cross_mesh
+[ 98%] Linking CXX executable round_geometry_fullfield_match
+[ 99%] Built target round_geometry_modal_convergence
+[100%] Built target round_geometry_multifidelity_probe
+[100%] Built target round_geometry_fullfield_match

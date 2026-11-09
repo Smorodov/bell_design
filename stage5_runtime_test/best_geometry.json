@@ -1,0 +1,18 @@
+{
+    "error": 6.34992,
+    "frequencies": {
+        "hum": 475.253,
+        "prime": 864,
+        "tertia": 1124,
+        "quinta": 1420.86,
+        "nominal": 1883.76
+    },
+    "geometry": {
+        "H": 612.458,
+        "R_mouth": 331.178,
+        "r_knots": [0, 0.130778, 0.216866, 0.45905, 1],
+        "t_bottom": 42.6803,
+        "t_top": 21.2645,
+        "ellipticity": 1
+    }
+}

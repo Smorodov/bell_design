@@ -1,0 +1,11 @@
+nNodes=15, mesh nodes=30, elements=14, f1=443.4566153 Hz
+nNodes=21, mesh nodes=42, elements=20, f1=439.518728 Hz
+nNodes=31, mesh nodes=62, elements=30, f1=437.3530281 Hz
+nNodes=41, mesh nodes=82, elements=40, f1=436.5884359 Hz
+nNodes=51, mesh nodes=102, elements=50, f1=436.2347253 Hz
+Maximum adjacent-level frequency change (modes 1-10): 8.88858602%
+Minimum adjacent-level absolute shape correlation: 0.0602289284
+Maximum adjacent-level normalized shape L2 error: 99.81845902%
+Final 41->51 max frequency change: 1.013361395%
+Final 41->51 min shape correlation: 0.9973467759
+Results: build_mesh_repeat/mesh_convergence_repeat.csv

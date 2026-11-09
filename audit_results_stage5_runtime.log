@@ -1,0 +1,122 @@
+✅ Загружены цели из targets.json
+✅ Загружены параметры эволюции из evolution.json
+
+============================================================
+  BELL OPTIMIZER - Bell Tuning  
+============================================================
+
+  Material preset: bell_bronze_reference
+  Material: E=11000.0 MPa, nu=0.34, rho=8.60e-09 t/mm^3
+  Target Prime: 864.0 Hz
+  Target ratios (relative to Prime):
+    Hum     = 0.50  (432.0 Hz)
+    Tertia  = 1.20  (1036.8 Hz)
+    Quinta  = 1.50  (1296.0 Hz)
+    Nominal = 2.00  (1728.0 Hz)
+  Population size: 2
+  Generations: 1
+  Elite count: 1
+  Mutation probability: 10%
+  Knots: 9
+  Ellipticity search: frozen q=1 [1, 1]
+  Direct elliptical vector FEM: disabled (legacy morph fallback)
+  RNG: deterministic, seed=17
+  Model family: neutral
+  Tuning model: western_five_partial
+============================================================
+
+  Modal solver: InternalAxisymmetricFEM
+
+📂 Найден сохранённый результат best_geometry.json
+   Загружаем как начальное приближение...
+📂 Loaded geometry from best_geometry.json
+   Old H = 613.5, R_mouth = 331.8
+   Old error = 6.682030
+   🔄 Rescaling to target frequency: 864.0 Hz
+   Current Prime: 864.00 Hz
+   Scale factor: 1.000
+   Scaled H = 613.5, R_mouth = 331.8
+   t_top/H = 0.0347, t_bottom/H = 0.0703
+✅ Rescaled successfully!
+   New error: 6.681920
+   New Prime: 864.00 Hz
+   🔍 Saving best result...
+      Error: 6.681920
+      Modes: 10
+      💾 Writing to best_geometry.json...
+      ✅ Saved successfully!
+   ✅ Продолжаем оптимизацию с сохранённого результата
+   Загружена ошибка: 6.681920
+
+============================================================
+  EVOLUTIONARY OPTIMIZER (Orthodox Bell Tuning)  
+============================================================
+  Target Prime: 864.0 Hz
+  Population: 2
+  Generations: 1
+  Mutation: 10%
+  Mode: one run per candidate via pluggable modal solver (analytical scaling)
+  Ellipticity search: frozen at q=1
+============================================================
+
+📂 Using loaded geometry as initial guess
+   Error: 6.681920
+   Adaptive search radius: 20%
+   ℹ️  No improvement. Best: 6.681920, Current: 6.681920
+   🔍 Saving best result...
+      Error: 6.681920
+      Modes: 10
+      💾 Writing to best_geometry.json...
+      ✅ Saved successfully!
+
+ Gen        Error          H         Rm      t_top      t_bot          Hum        Prime       Tertia       Quinta      Nominal
+------------------------------------------------------------------------------------------------------------------------
+   0      6.6819     613.5     331.8      21.3      43.1       475.1       864.0      1122.5      1420.8      1882.1
+
+--- Generation 1 ---
+   🆕 New best! Error: 6.349919 (was 6.681920)
+   🔍 Saving best result...
+      Error: 6.349919
+      Modes: 10
+      💾 Writing to best_geometry.json...
+      ✅ Saved successfully!
+   1      6.3499     612.5     331.2      21.3      42.7       475.3       864.0      1124.0      1420.9      1883.8
+
+📝 Final save...
+   🔍 Saving best result...
+      Error: 6.349919
+      Modes: 10
+      💾 Writing to best_geometry.json...
+      ✅ Saved successfully!
+
+============================================================
+  OPTIMIZATION COMPLETED  
+============================================================
+  Best error: 6.349919
+  Time: 3.0 s
+  Modal solver runs: 4
+============================================================
+
+  Best geometry:
+    H         = 612.5 mm
+    R_mouth   = 331.2 mm
+    t_top     = 21.3 mm
+    t_bottom  = 42.7 mm
+    Radii     = 0.000 0.131 0.217 0.459 1.000 
+
+  Frequencies:
+    Hum: 475.25 Hz
+    Prime: 864.00 Hz (ratio: 1.000)
+    Tertia: 1124.00 Hz (ratio: 1.301)
+    Quinta: 1420.86 Hz (ratio: 1.645)
+    Nominal: 1883.76 Hz (ratio: 2.180)
+
+  Model geometry assessment [neutral]:
+    score       = 83.2/100
+    proportions = 100.0/100
+    thickness   = 93.2/100
+    profile     = 40.8/100
+    verdict     = strong geometric/style compatibility
+
+[TIME] Total: 2985 ms
+

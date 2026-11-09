@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.16)
-project(BellOptimizer VERSION 1.2.183 LANGUAGES CXX)
+project(BellOptimizer VERSION 1.2.184 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -28,6 +28,8 @@ add_library(bell_core STATIC
     src/core/bell_material.cpp
     src/core/bell_optimizer.cpp
     src/core/modal_tracking.cpp
+    research/round_bell_audit/modal_family_adapter.cpp
+    research/round_bell_audit/round_bell_candidate_analysis.cpp
     src/models/bell_model_profile.cpp
     src/math/coordinate_morphing.cpp
     src/math/modal_coordinate_morphing.cpp
@@ -570,3 +572,55 @@ message(STATUS "")
 
 
 
+
+if(BUILD_SMOKE_TESTS)
+    add_executable(round_geometry_dataset research/round_bell_audit/round_geometry_dataset.cpp)
+    target_link_libraries(round_geometry_dataset PRIVATE bell_core)
+endif()
+
+if(BUILD_SMOKE_TESTS)
+    add_executable(round_geometry_modal_convergence research/round_bell_audit/round_geometry_modal_convergence.cpp)
+    target_link_libraries(round_geometry_modal_convergence PRIVATE bell_core)
+endif()
+
+if(BUILD_SMOKE_TESTS)
+    add_executable(round_geometry_multifidelity_probe research/round_bell_audit/round_geometry_multifidelity_probe.cpp)
+    target_link_libraries(round_geometry_multifidelity_probe PRIVATE bell_core)
+endif()
+
+if(BUILD_SMOKE_TESTS)
+    add_executable(round_geometry_fullfield_match research/round_bell_audit/round_geometry_fullfield_match.cpp)
+    target_link_libraries(round_geometry_fullfield_match PRIVATE bell_core bell_experimental)
+endif()
+
+if(BUILD_SMOKE_TESTS)
+    add_executable(round_geometry_multiharmonic_match research/round_bell_audit/round_geometry_multiharmonic_match.cpp)
+    target_link_libraries(round_geometry_multiharmonic_match PRIVATE bell_core bell_experimental)
+endif()
+
+if(BUILD_SMOKE_TESTS)
+    add_executable(round_geometry_thickness_sweep research/round_bell_audit/round_geometry_thickness_sweep.cpp)
+    target_link_libraries(round_geometry_thickness_sweep PRIVATE bell_core)
+endif()
+
+if(BUILD_SMOKE_TESTS)
+    add_executable(round_geometry_thickness_mass_sweep research/round_bell_audit/round_geometry_thickness_mass_sweep.cpp)
+    target_link_libraries(round_geometry_thickness_mass_sweep PRIVATE bell_core bell_experimental)
+endif()
+
+# Round-bell optimizer integration diagnostic. This is intentionally a research
+# executable: it validates the direct cylindrical FEM + localized circular
+# strike hand-off without changing the production optimizer/objective.
+if(BUILD_SMOKE_TESTS)
+    add_executable(round_optimizer_integration_probe
+        research/round_bell_audit/round_optimizer_integration_probe.cpp
+        research/round_bell_audit/modal_family_adapter.cpp
+        research/round_bell_audit/round_bell_candidate_analysis.cpp)
+    target_link_libraries(round_optimizer_integration_probe PRIVATE bell_core)
+
+    add_executable(modal_family_adapter_contract
+        tests/modal_family_adapter_contract.cpp
+        research/round_bell_audit/modal_family_adapter.cpp)
+    target_link_libraries(modal_family_adapter_contract PRIVATE bell_core)
+    add_test(NAME modal_family_adapter_contract COMMAND modal_family_adapter_contract)
+endif()

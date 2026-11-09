@@ -1,0 +1,9 @@
+[ 87%] Built target bell_core
+[ 93%] Building CXX object CMakeFiles/bell.dir/src/commands/optimize.cpp.o
+[ 93%] Building CXX object CMakeFiles/bell.dir/src/main.cpp.o
+[ 93%] Building CXX object CMakeFiles/bell.dir/src/commands/synthesize.cpp.o
+[ 93%] Building CXX object CMakeFiles/bell.dir/src/commands/synthesize_geometry.cpp.o
+[100%] Building CXX object CMakeFiles/bell.dir/src/commands/synthesize_contact.cpp.o
+[100%] Building CXX object CMakeFiles/bell.dir/src/synthesis/bell_synthesis.cpp.o
+[100%] Linking CXX executable bell
+[100%] Built target bell

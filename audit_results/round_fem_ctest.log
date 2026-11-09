@@ -1,0 +1,43 @@
+UTC 2026-11-08T07:26:09Z
+Internal ctest changing into directory: /mnt/data/bell_audit_work/BellOptimizer-1.2.184-round-bell-subspace-invariance/build
+Test project /mnt/data/bell_audit_work/BellOptimizer-1.2.184-round-bell-subspace-invariance/build
+      Start 22: modal_physics_validation
+ 1/18 Test #22: modal_physics_validation ...................   Passed    0.27 sec
+      Start 26: profile_spline_convergence
+ 2/18 Test #26: profile_spline_convergence .................   Passed    0.72 sec
+      Start 52: cylindrical_axis_regularity_contract
+ 3/18 Test #52: cylindrical_axis_regularity_contract .......   Passed    0.00 sec
+      Start 61: mesh_convergence
+ 4/18 Test #61: mesh_convergence ...........................   Passed    0.30 sec
+      Start 62: thickness_mesh_convergence
+ 5/18 Test #62: thickness_mesh_convergence .................   Passed    0.63 sec
+      Start 71: nonaxisymmetric_reference_mesh_contract
+ 6/18 Test #71: nonaxisymmetric_reference_mesh_contract ....   Passed    0.00 sec
+      Start 76: cylindrical_bell_geometry_path_contract
+ 7/18 Test #76: cylindrical_bell_geometry_path_contract ....   Passed    1.57 sec
+      Start 77: cylindrical_global_modes_contract
+ 8/18 Test #77: cylindrical_global_modes_contract ..........   Passed    0.45 sec
+      Start 78: cylindrical_internal_solver_compare
+ 9/18 Test #78: cylindrical_internal_solver_compare ........   Passed    0.01 sec
+      Start 80: cylindrical_modal_family_tracking
+10/18 Test #80: cylindrical_modal_family_tracking ..........   Passed    3.40 sec
+      Start 81: modal_subspace_similarity_contract
+11/18 Test #81: modal_subspace_similarity_contract .........   Passed    0.00 sec
+      Start 82: modal_subspace_conditioning_contract
+12/18 Test #82: modal_subspace_conditioning_contract .......   Passed    0.00 sec
+      Start 83: cylindrical_bell_geometry_modal_tracking
+13/18 Test #83: cylindrical_bell_geometry_modal_tracking ...   Passed    1.71 sec
+      Start 84: cylindrical_harmonic_family_continuation
+14/18 Test #84: cylindrical_harmonic_family_continuation ...   Passed   15.77 sec
+      Start 88: inner_surface_modal_export_contract
+15/18 Test #88: inner_surface_modal_export_contract ........   Passed    0.13 sec
+      Start 97: modal_tracker_fem_continuation
+16/18 Test #97: modal_tracker_fem_continuation .............   Passed    6.89 sec
+      Start 98: cylindrical_modal_field_cross_mesh
+17/18 Test #98: cylindrical_modal_field_cross_mesh .........   Passed    0.27 sec
+      Start 99: cylindrical_modal_field_fem_matrix
+18/18 Test #99: cylindrical_modal_field_fem_matrix .........   Passed    2.65 sec
+
+100% tests passed, 0 tests failed out of 18
+
+Total Test time (real) =  34.79 sec

@@ -104,7 +104,7 @@ ShapeMetrics compareShape(const BellOptimizer::ModalMode& coarse, int nc,
 
 int main(int argc, char** argv) {
     const std::filesystem::path out_path = argc > 1 ? argv[1] : "mesh_convergence.csv";
-    const std::vector<int> resolutions{15, 21, 31, 41, 51};
+    const std::vector<int> resolutions{41, 51, 61, 71, 81};
     BellMaterial material;
     std::vector<Level> levels;
     for (int n : resolutions) {
@@ -146,7 +146,7 @@ int main(int argc, char** argv) {
             << "method=internal_axisymmetric_Q4_FEM\n"
             << "refinement=meridional_profile_only; one Q4 element across wall thickness\n"
             << "modes_compared=10\n"
-            << "profile_nodes_sequence=15,21,31,41,51\n"
+            << "profile_nodes_sequence=41,51,61,71,81\n"
             << "fundamental_frequency_hz_by_level\n";
     for (const auto& level : levels)
         summary << level.profile_nodes << ',' << level.modes.modes.front().frequency_hz << '\n';
@@ -162,7 +162,7 @@ int main(int argc, char** argv) {
         final_max_shape_error = std::max(final_max_shape_error, shape.error);
         final_min_shape_corr = std::min(final_min_shape_corr, shape.correlation);
     }
-    summary << "\nfinal_adjacent_refinement=41_to_51\n"
+    summary << "\nfinal_adjacent_refinement=71_to_81\n"
             << "max_frequency_change_modes_1_to_10_percent=" << final_max_freq_delta * 100.0 << '\n'
             << "min_absolute_shape_correlation_modes_1_to_10=" << final_min_shape_corr << '\n'
             << "max_normalized_shape_l2_error_modes_1_to_10_percent=" << final_max_shape_error * 100.0 << '\n'
@@ -174,8 +174,8 @@ int main(int argc, char** argv) {
               << max_freq_delta * 100.0 << "%\n"
               << "Minimum adjacent-level absolute shape correlation: " << min_shape_corr << '\n'
               << "Maximum adjacent-level normalized shape L2 error: " << max_shape_error * 100.0 << "%\n"
-              << "Final 41->51 max frequency change: " << final_max_freq_delta * 100.0 << "%\n"
-              << "Final 41->51 min shape correlation: " << final_min_shape_corr << '\n'
+              << "Final 71->81 max frequency change: " << final_max_freq_delta * 100.0 << "%\n"
+              << "Final 71->81 min shape correlation: " << final_min_shape_corr << '\n'
               << "Results: " << out_path.string() << '\n';
     return csv && summary ? 0 : 4;
 }

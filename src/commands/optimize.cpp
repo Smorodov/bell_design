@@ -129,6 +129,8 @@ int command_optimize(int argc, char** argv) {
         evo.deterministic = bell::json::boolean(data, "deterministic", false);
         evo.optimize_ellipticity = bell::json::boolean(data, "optimize_ellipticity", false);
         evo.use_direct_elliptical_fem = bell::json::boolean(data, "use_direct_elliptical_fem", false);
+        evo.enable_round_fem_diagnostics = bell::json::boolean(data, "enable_round_fem_diagnostics", false);
+        evo.round_fem_diagnostics_csv = bell::json::string(data, "round_fem_diagnostics_csv", "round_fem_diagnostics.csv");
         evo.ellipticity_min = bell::json::number(data, "ellipticity_min", 0.70);
         evo.ellipticity_max = bell::json::number(data, "ellipticity_max", 1.00);
         material_id = bell::json::string(data, "material", material_id);

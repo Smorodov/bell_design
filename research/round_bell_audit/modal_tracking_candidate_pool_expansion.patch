@@ -1,0 +1,32 @@
+--- audit_results/modal_tracking_checkpoint_before_pool_fix.cpp	2026-11-08 08:18:52.299585014 +0000
++++ src/core/modal_tracking.cpp	2026-11-08 08:18:53.007306420 +0000
+@@ -172,19 +172,25 @@
+ 
+     const std::size_t n = reference.modes.size();
+     const std::size_t m = candidate.modes.size();
+-    const std::size_t count = std::min<std::size_t>({n, m, 10});
++    const std::size_t reference_count = std::min<std::size_t>(n, 10);
++    // The candidate pool may be wider than the reference family set. In
++    // particular, direct vector FEM can interleave torsional families between
++    // the meridional modes tracked by the fast axisymmetric solver. Keep a
++    // bounded exact-assignment pool rather than truncating to the first N modes.
++    const std::size_t candidate_count = std::min<std::size_t>(m, 20);
++    const std::size_t count = std::min(reference_count, candidate_count);
+     if (count < 2) return report;
+ 
+     for (std::size_t i = 0; i < count; ++i) {
+         if (!hasShape(reference.modes[i])) return report;
+     }
+-    for (std::size_t j = 0; j < count; ++j) {
++    for (std::size_t j = 0; j < candidate_count; ++j) {
+         if (!hasShape(candidate.modes[j])) return report;
+     }
+ 
+-    std::vector<std::vector<double>> score(count, std::vector<double>(count, -1.0));
++    std::vector<std::vector<double>> score(count, std::vector<double>(candidate_count, -1.0));
+     for (std::size_t i = 0; i < count; ++i) {
+-        for (std::size_t j = 0; j < count; ++j) {
++        for (std::size_t j = 0; j < candidate_count; ++j) {
+             const double shape = shapeCosine(reference.modes[i], candidate.modes[j]);
+             if (shape < 0.0) continue;
+             // Shape is the identity criterion. Frequency is only a weak tie-breaker,

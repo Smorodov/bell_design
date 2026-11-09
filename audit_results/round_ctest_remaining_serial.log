@@ -1,0 +1,19 @@
+Internal ctest changing into directory: /mnt/data/bell_next/build_mesh_repeat
+Test project /mnt/data/bell_next/build_mesh_repeat
+      Start 85: cylindrical_unified_ellipticity_audit
+ 1/15 Test #85: cylindrical_unified_ellipticity_audit ...   Passed   34.12 sec
+      Start 86: hammer_contact_contract
+ 2/15 Test #86: hammer_contact_contract .................   Passed    0.01 sec
+      Start 87: internal_clapper_geometry_contract
+ 3/15 Test #87: internal_clapper_geometry_contract ......   Passed    0.00 sec
+      Start 88: inner_surface_modal_export_contract
+ 4/15 Test #88: inner_surface_modal_export_contract .....   Passed    0.13 sec
+      Start 89: clapper_dynamics_contract
+ 5/15 Test #89: clapper_dynamics_contract ...............   Passed    0.06 sec
+      Start 90: clapper_modal_evaluator_contract
+ 6/15 Test #90: clapper_modal_evaluator_contract ........   Passed    0.00 sec
+      Start 91: clapper_candidate_data_reuse_contract
+ 7/15 Test #91: clapper_candidate_data_reuse_contract ...   Passed    0.00 sec
+      Start 92: clapper_acoustic_objective_contract
+ 8/15 Test #92: clapper_acoustic_objective_contract .....   Passed    0.00 sec
+      Start 93: clapper_modal_spectrum_family_audit

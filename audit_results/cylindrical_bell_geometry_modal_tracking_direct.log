@@ -1,0 +1,6 @@
+reference_count=4 converged=1 residual=7.32124e-10
+real_bell_q1_modes: 15.6732 15.6732 22.1291 362.942
+reference_pair=0,1 relative_split=6.39742e-11
+q=0.95 tracked_pair=0,1 pair_freq_Hz=25.539,26.3219 split=0.0306538 subspace_similarity=0.999855 individual_overlap=0.994502 residual=1.96661e-09
+q=0.9 tracked_pair=0,1 pair_freq_Hz=42.8831,45.8722 split=0.0697024 subspace_similarity=0.998856 individual_overlap=0.993715 residual=2.5671e-10
+cylindrical_bell_geometry_modal_tracking: PASS

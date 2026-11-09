@@ -227,6 +227,10 @@ struct EvolutionParams {
     // the direct vector cylindrical FEM path. The default remains false until
     // the Chinese-bell objective is finalized.
     bool use_direct_elliptical_fem = false;
+    // Opt-in side-channel validation for circular candidates. Runs direct
+    // cylindrical FEM + modal-family/strike analysis without affecting fitness.
+    bool enable_round_fem_diagnostics = false;
+    std::string round_fem_diagnostics_csv = "round_fem_diagnostics.csv";
     double ellipticity_min = 0.70;
     double ellipticity_max = 1.00;
 };

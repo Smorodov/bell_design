@@ -33,3 +33,16 @@ The adjacent 41→49 refinement changed maximum pair frequency by 0.1596% and pa
 The diagnostic tracking stage is closed for the tested q path, selected mesh/Fourier continuations and selected modal families. This is not a universal proof for arbitrary bells, crossings or spectra. Particle filters, multi-hypothesis tracking and a large-spectrum assignment API are deferred until a concrete case demonstrates that the current method fails.
 
 Frequency rank alone is never a physical modal identity criterion. Subspace continuity is a numerical association measure, not proof of a historical mode family. No tracker is integrated into the production optimizer by this audit.
+
+
+## 1.2.184 numerical invariance regression
+
+The rank-2 principal-angle implementation passed 30 deterministic basis-change
+cases covering in-plane rotations, vector permutations, sign flips and unequal
+scales (worst absolute deviation from unity: 2.22e-16). A second 30-case sweep
+rotated one principal direction out of the reference plane and matched the
+analytical minimum overlap cos(theta) to 2.22e-16 worst absolute error. The
+controlled nested-mesh FEM comparison remains at 0.999854 minimum one-to-one
+mode overlap and 0.999966 pair-subspace similarity. These are numerical
+regressions, not measured-bell validation and not evidence that the boundary
+trace metric can replace full-volume mass-weighted comparison across solvers.

@@ -1,0 +1,72 @@
+#include "bell_generator.h"
+#include "excitation/meridional_influence.hpp"
+#include "fem/cylindrical_bell_model.hpp"
+#include "fem/cylindrical_modal_evaluator.hpp"
+#include "fem/cylindrical_modal_field.hpp"
+#include "fem/internal_modal_solver.hpp"
+
+#include <algorithm>
+#include <array>
+#include <cmath>
+#include <fstream>
+#include <iomanip>
+#include <iostream>
+#include <sstream>
+#include <string>
+#include <vector>
+
+using namespace BellOptimizer;
+using namespace BellOptimizer::FEM;
+namespace {
+constexpr int kFastModes=8, kDirectCandidates=96;
+std::vector<std::string> split(const std::string&s){std::vector<std::string>v;std::stringstream ss(s);std::string x;while(std::getline(ss,x,','))v.push_back(x);return v;}
+BellGeometry geometryFrom(const std::vector<std::string>&f){BellGeometry g;g.H=std::stod(f[2]);g.R_mouth=std::stod(f[3]);g.t_top=std::stod(f[4]);g.t_bottom=std::stod(f[5]);g.r_knots={0.0,std::stod(f[6]),std::stod(f[7]),std::stod(f[8]),1.0};g.ellipticity=std::stod(f[9]);return g;}
+bool solveFast(const BellGeometry&g,const BellMaterial&m,const BellMeshConfig&cfg,ModalData&out){BellGenerator gen(m,cfg);gen.setGeometry(g);if(!gen.validateGeometry().passed||!gen.buildMesh())return false;Excitation::MeridionalInfluence inf;ModalProblem p{gen.getMeshData(),m,".","fullfield_fast",&inf};InternalModalSolver solver(true,kFastModes,true);return solver.solve(p,out)&&out.modes.size()>=kFastModes;}
+bool solveDirect(const BellGeometry&g,const BellMaterial&m,const BellMeshConfig&cfg,const CylindricalBellModel&model,ModalData&out){Excitation::MeridionalInfluence provider;const auto inf=provider.make(model.mesh_si);CylindricalModalEvaluationConfig c;c.harmonics={0,1,2,3};c.angular_samples=64;c.requested_modes=kDirectCandidates;c.max_iterations=1600;c.tolerance=1e-6;c.minimum_frequency_hz=1.0;return evaluate_cylindrical_bell_modes(model,inf,c,out)&&out.modes.size()>=kDirectCandidates;}
+std::array<int,kFastModes> maximumAssignment(const std::array<std::array<double,kDirectCandidates>,kFastModes>& score) {
+    // Rectangular Hungarian algorithm: assign every fast reference mode to a
+    // distinct member of the wider direct-FEM candidate pool.
+    const int n=kFastModes,m=kDirectCandidates;
+    std::vector<double> u(n+1),v(m+1),minv(m+1);
+    std::vector<int> p(m+1),way(m+1);
+    std::vector<bool> used(m+1);
+    for(int i=1;i<=n;++i){
+        p[0]=i; int j0=0;
+        std::fill(minv.begin(),minv.end(),1e100);
+        std::fill(used.begin(),used.end(),false);
+        do {
+            used[j0]=true; const int i0=p[j0]; double delta=1e100; int j1=0;
+            for(int j=1;j<=m;++j) if(!used[j]) {
+                const double cur=-score[i0-1][j-1]-u[i0]-v[j];
+                if(cur<minv[j]){minv[j]=cur;way[j]=j0;}
+                if(minv[j]<delta){delta=minv[j];j1=j;}
+            }
+            for(int j=0;j<=m;++j){if(used[j]){u[p[j]]+=delta;v[j]-=delta;}else minv[j]-=delta;}
+            j0=j1;
+        } while(p[j0]!=0);
+        do {const int j1=way[j0];p[j0]=p[j1];j0=j1;} while(j0!=0);
+    }
+    std::array<int,kFastModes> assignment{}; assignment.fill(-1);
+    for(int j=1;j<=m;++j) if(p[j]>0) assignment[p[j]-1]=j-1;
+    return assignment;
+}
+double objective(const std::array<double,5>&f){if(!(f[1]>0))return 1e9;const std::array<double,4>t{0.5,1.25,1.5,2.0};const std::array<int,4>ix{0,2,3,4};double s=0;for(std::size_t i=0;i<4;++i){double r=f[static_cast<std::size_t>(ix[i])]/f[1];if(!(r>0)||!std::isfinite(r))return 1e9;double e=std::log(r/t[i]);s+=e*e;}return s;}
+std::vector<double> ranks(const std::vector<double>&x){std::vector<std::size_t>o(x.size());for(std::size_t i=0;i<o.size();++i)o[i]=i;std::stable_sort(o.begin(),o.end(),[&](auto a,auto b){return x[a]<x[b];});std::vector<double>r(x.size());for(std::size_t i=0;i<o.size();++i)r[o[i]]=double(i+1);return r;}
+double spearman(const std::vector<double>&a,const std::vector<double>&b){if(a.size()!=b.size()||a.size()<2)return 0;auto x=ranks(a),y=ranks(b);double mx=0,my=0;for(double v:x)mx+=v;for(double v:y)my+=v;mx/=x.size();my/=y.size();double c=0,vx=0,vy=0;for(std::size_t i=0;i<x.size();++i){double dx=x[i]-mx,dy=y[i]-my;c+=dx*dy;vx+=dx*dx;vy+=dy*dy;}return vx>0&&vy>0?c/std::sqrt(vx*vy):0;}
+struct Match{std::array<int,kFastModes>direct{},boundary_direct{};double min_overlap=1,mean_overlap=0,max_freq_error=0,min_coverage=1,min_boundary=1,mean_boundary=0,min_boundary_pool=1;bool same_assignment=false;};
+Match fullFieldAssignment(const BellMeshData&mesh,double q,double density,const ModalData&fast,const ModalData&direct){
+    std::vector<int> h{0};std::array<std::array<double,kDirectCandidates>,kFastModes> score{};
+    std::array<std::array<CylindricalModalFieldOverlap,kDirectCandidates>,kFastModes> overlaps{};
+    std::array<std::array<double,kDirectCandidates>,kFastModes> boundary_scores{};
+    std::vector<std::vector<double>> fast_vectors(kFastModes);
+    for(int i=0;i<kFastModes;++i){const auto&fm=fast.modes[static_cast<std::size_t>(i)];if(fm.nodal_radial.size()!=mesh.nodes.size()||fm.nodal_axial.size()!=mesh.nodes.size())throw std::runtime_error("fast mode does not cover the common mesh nodes");auto&v=fast_vectors[i];v.assign(mesh.nodes.size()*3u,0.0);for(std::size_t n=0;n<mesh.nodes.size();++n){v[n*3u]=fm.nodal_radial[n];v[n*3u+2u]=fm.nodal_axial[n];}}
+    for(int i=0;i<kFastModes;++i)for(int j=0;j<kDirectCandidates;++j){const auto&dm=direct.modes[static_cast<std::size_t>(j)];const auto&fm=fast.modes[static_cast<std::size_t>(i)];std::vector<int> direct_harmonics;for(int harmonic:dm.fem_harmonics)if(harmonic>=0)direct_harmonics.push_back(harmonic);const std::size_t direct_basis_count=1u+2u*(direct_harmonics.size()-1u);if(dm.fem_displacement.size()!=mesh.nodes.size()*3u*direct_basis_count||direct_harmonics!=std::vector<int>({0,1,2,3}))throw std::runtime_error("direct mode does not use expected m=0..3 full-field layout");CylindricalModalField a{&mesh,&h,&fast_vectors[i],q,density};CylindricalModalField b{&mesh,&direct_harmonics,&dm.fem_displacement,q,density};overlaps[i][j]=compare_cylindrical_modal_fields(a,b,64,0.98);if(!overlaps[i][j].valid)throw std::runtime_error("invalid common-volume mass overlap");score[i][j]=overlaps[i][j].normalized_overlap;double dot=0,na=0,nb=0;if(fm.outer_surface_radial.size()!=dm.outer_surface_radial.size()||fm.outer_surface_axial.size()!=dm.outer_surface_axial.size())throw std::runtime_error("outer boundary samples are incompatible");for(std::size_t k=0;k<fm.outer_surface_radial.size();++k){double ar=fm.outer_surface_radial[k],az=fm.outer_surface_axial[k],br=dm.outer_surface_radial[k],bz=dm.outer_surface_axial[k];dot+=ar*br+az*bz;na+=ar*ar+az*az;nb+=br*br+bz*bz;}boundary_scores[i][j]=(na>0&&nb>0)?std::abs(dot)/std::sqrt(na*nb):0;}
+    Match out;
+    out.direct=maximumAssignment(score);
+    out.boundary_direct=maximumAssignment(boundary_scores);
+    out.same_assignment=(out.direct==out.boundary_direct);
+    double sum=0,boundary_sum=0;for(int i=0;i<kFastModes;++i){int j=out.direct[i];const auto&o=overlaps[i][j];out.min_overlap=std::min(out.min_overlap,o.normalized_overlap);out.min_coverage=std::min(out.min_coverage,o.common_volume_fraction);sum+=o.normalized_overlap;const auto&fa=fast.modes[i];const auto&db=direct.modes[j];double dot=0,na=0,nb=0;if(fa.outer_surface_radial.size()!=db.outer_surface_radial.size()||fa.outer_surface_axial.size()!=db.outer_surface_axial.size())throw std::runtime_error("outer boundary samples are incompatible");for(std::size_t k=0;k<fa.outer_surface_radial.size();++k){double ar=fa.outer_surface_radial[k],az=fa.outer_surface_axial[k],br=db.outer_surface_radial[k],bz=db.outer_surface_axial[k];dot+=ar*br+az*bz;na+=ar*ar+az*az;nb+=br*br+bz*bz;}double bc=(na>0&&nb>0)?std::abs(dot)/std::sqrt(na*nb):0;out.min_boundary=std::min(out.min_boundary,bc);boundary_sum+=bc;out.min_boundary_pool=std::min(out.min_boundary_pool,boundary_scores[i][out.boundary_direct[i]]);const double ff=fa.frequency_hz,fd=db.frequency_hz;out.max_freq_error=std::max(out.max_freq_error,std::abs(ff-fd)/std::max(std::abs(fd),1e-12));}out.mean_overlap=sum/kFastModes;out.mean_boundary=boundary_sum/kFastModes;return out;
+}
+}
+int main(int argc,char**argv){const std::string input=argc>1?argv[1]:"round_geometry_dataset.csv",output=argc>2?argv[2]:"round_geometry_fullfield_match.csv";const int profile_nodes=argc>3?std::stoi(argv[3]):15;std::ifstream in(input);if(!in)return 1;std::string line;std::getline(in,line);std::ofstream csv(output);if(!csv)return 2;csv<<"geometry_index,tag,min_fullfield_overlap,mean_fullfield_overlap,min_boundary_trace_overlap,mean_boundary_trace_overlap,min_boundary_pool_overlap,boundary_fullfield_assignment_agree,min_common_volume_fraction,max_first8_frequency_error,fast_objective,fullfield_matched_direct_objective,assignment\n";csv<<std::setprecision(12);BellMaterial material;BellMeshConfig cfg;cfg.nNodes=profile_nodes;std::size_t count=0,fail=0;double minov=1,mincov=1,maxerr=0,summean=0;std::vector<double> fast_scores,direct_scores;while(std::getline(in,line)){if(line.empty())continue;const auto f=split(line);if(f.size()<17||f[16]!="PASS")continue;try{const auto g=geometryFrom(f);ModalData fast,direct;CylindricalBellModel model=make_cylindrical_bell_model(g,material,cfg);if(!solveFast(g,material,cfg,fast)||!solveDirect(g,material,cfg,model,direct))throw std::runtime_error("solver failed");const Match m=fullFieldAssignment(model.mesh_si,g.ellipticity,model.density_kg_m3,fast,direct);std::array<double,5>ff{},fd{};for(int k=0;k<5;++k){ff[k]=fast.modes[k].frequency_hz;fd[k]=direct.modes[static_cast<std::size_t>(m.direct[k])].frequency_hz;}const double fs=objective(ff),ds=objective(fd);fast_scores.push_back(fs);direct_scores.push_back(ds);++count;minov=std::min(minov,m.min_overlap);mincov=std::min(mincov,m.min_coverage);maxerr=std::max(maxerr,m.max_freq_error);summean+=m.mean_overlap;csv<<f[0]<<','<<f[1]<<','<<m.min_overlap<<','<<m.mean_overlap<<','<<m.min_boundary<<','<<m.mean_boundary<<','<<m.min_boundary_pool<<','<<(m.same_assignment?1:0)<<','<<m.min_coverage<<','<<m.max_freq_error<<','<<fs<<','<<ds<<",\"";for(int i=0;i<kFastModes;++i)csv<<(i?";":"")<<(i+1)<<"->"<<(m.direct[i]+1);csv<<'"'<<'\n';if(count%10==0)std::cout<<"completed="<<count<<'\n';}catch(const std::exception&e){++fail;std::cerr<<"FAIL geometry="<<f[0]<<" "<<f[1]<<" reason="<<e.what()<<'\n';}}
+std::cout<<"profile_nodes="<<profile_nodes<<" multiharmonic_fullfield_geometries="<<count<<" failures="<<fail<<" min_overlap="<<minov<<" mean_overlap="<<(count?summean/count:0)<<" min_coverage="<<mincov<<" max_first8_frequency_error="<<maxerr<<'\n';return count>0&&fail==0&&csv?0:3;}

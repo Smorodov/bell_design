@@ -1,0 +1,194 @@
+Internal ctest changing into directory: /mnt/data/bell_next/build_mesh_repeat
+Test project /mnt/data/bell_next/build_mesh_repeat
+      Start 83: cylindrical_harmonic_family_continuation
+      Start 79: cylindrical_modal_family_tracking
+ 1/98 Test #79: cylindrical_modal_family_tracking ................   Passed    3.45 sec
+      Start 98: cylindrical_modal_field_fem_matrix
+ 2/98 Test #98: cylindrical_modal_field_fem_matrix ...............   Passed    2.80 sec
+      Start 82: cylindrical_bell_geometry_modal_tracking
+ 3/98 Test #82: cylindrical_bell_geometry_modal_tracking .........   Passed    1.79 sec
+      Start 62: thickness_mesh_convergence
+ 4/98 Test #62: thickness_mesh_convergence .......................   Passed    0.73 sec
+      Start 77: cylindrical_global_modes_contract
+ 5/98 Test #77: cylindrical_global_modes_contract ................   Passed    0.52 sec
+      Start 97: cylindrical_modal_field_cross_mesh
+ 6/98 Test #97: cylindrical_modal_field_cross_mesh ...............   Passed    0.31 sec
+      Start 61: mesh_convergence
+ 7/98 Test #61: mesh_convergence .................................   Passed    0.25 sec
+      Start 75: cylindrical_global_assembly_contract
+ 8/98 Test #75: cylindrical_global_assembly_contract .............   Passed    0.03 sec
+      Start 73: cylindrical_strain_contract
+ 9/98 Test #73: cylindrical_strain_contract ......................   Passed    0.00 sec
+      Start 52: cylindrical_axis_regularity_contract
+10/98 Test #52: cylindrical_axis_regularity_contract .............   Passed    0.00 sec
+      Start 24: modal_family_tracking
+11/98 Test #24: modal_family_tracking ............................   Passed    0.00 sec
+      Start 95: modal_state_tracker_contract
+12/98 Test #95: modal_state_tracker_contract .....................   Passed    0.00 sec
+      Start 80: modal_subspace_similarity_contract
+13/98 Test #80: modal_subspace_similarity_contract ...............   Passed    0.00 sec
+      Start  1: synthesis_sdk_link_contract
+14/98 Test  #1: synthesis_sdk_link_contract ......................   Passed    0.00 sec
+      Start  2: modal_impulse_response_contract
+15/98 Test  #2: modal_impulse_response_contract ..................   Passed    0.00 sec
+      Start  3: modal_decay_contract
+16/98 Test  #3: modal_decay_contract .............................   Passed    0.00 sec
+      Start  4: bell_core_smoke
+17/98 Test  #4: bell_core_smoke ..................................   Passed    0.00 sec
+      Start  5: rcm_ordering_audit
+18/98 Test  #5: rcm_ordering_audit ...............................   Passed    0.19 sec
+      Start  6: sparse_matrix_contract
+19/98 Test  #6: sparse_matrix_contract ...........................   Passed    0.00 sec
+      Start  7: sparse_eigensolver_contract
+20/98 Test  #7: sparse_eigensolver_contract ......................   Passed    0.00 sec
+      Start  8: rcm_initial_vector_contract
+21/98 Test  #8: rcm_initial_vector_contract ......................   Passed    0.00 sec
+      Start  9: matrix_assembly_audit
+22/98 Test  #9: matrix_assembly_audit ............................   Passed    0.02 sec
+      Start 10: sparse_fem_solver_audit
+23/98 Test #10: sparse_fem_solver_audit ..........................   Passed    0.04 sec
+      Start 11: sparse_dense_mode_comparison
+24/98 Test #11: sparse_dense_mode_comparison .....................   Passed    2.74 sec
+      Start 12: sparse_solver_robustness
+25/98 Test #83: cylindrical_harmonic_family_continuation .........   Passed   15.95 sec
+      Start 13: sparse_solver_production_contract
+26/98 Test #13: sparse_solver_production_contract ................   Passed    0.00 sec
+      Start 14: sparse_solver_scaling
+27/98 Test #14: sparse_solver_scaling ............................   Passed    0.07 sec
+      Start 15: sparse_solver_scaling_contract
+28/98 Test #15: sparse_solver_scaling_contract ...................   Passed    0.00 sec
+      Start 16: sparse_conditioning_audit
+29/98 Test #16: sparse_conditioning_audit ........................   Passed    0.00 sec
+      Start 17: rcm_solver_benchmark
+30/98 Test #17: rcm_solver_benchmark .............................   Passed    0.51 sec
+      Start 18: sparse_pruning_audit
+31/98 Test #18: sparse_pruning_audit .............................   Passed    0.01 sec
+      Start 19: eigenpair_integrity
+32/98 Test #19: eigenpair_integrity ..............................   Passed    0.01 sec
+      Start 20: low_frequency_mode_policy
+33/98 Test #20: low_frequency_mode_policy ........................   Passed    0.02 sec
+      Start 21: rotational_reference_frame_audit
+34/98 Test #21: rotational_reference_frame_audit .................   Passed    0.00 sec
+      Start 22: modal_physics_validation
+35/98 Test #22: modal_physics_validation .........................   Passed    0.26 sec
+      Start 23: modal_objective_convergence
+36/98 Test #23: modal_objective_convergence ......................   Passed    0.25 sec
+      Start 25: optimizer_shape_scale_audit
+37/98 Test #25: optimizer_shape_scale_audit ......................   Passed    0.03 sec
+      Start 26: profile_spline_convergence
+38/98 Test #12: sparse_solver_robustness .........................   Passed    4.88 sec
+      Start 27: castability_geometry_contract
+39/98 Test #27: castability_geometry_contract ....................   Passed    0.02 sec
+      Start 28: acoustic_modal_validation
+40/98 Test #28: acoustic_modal_validation ........................   Passed    0.01 sec
+      Start 29: acoustic_pressure_contract
+41/98 Test #29: acoustic_pressure_contract .......................   Passed    0.00 sec
+      Start 30: acoustic_pressure_scaling_audit
+42/98 Test #30: acoustic_pressure_scaling_audit ..................   Passed    0.00 sec
+      Start 31: acoustic_pressure_phase_contract
+43/98 Test #31: acoustic_pressure_phase_contract .................   Passed    0.00 sec
+      Start 32: acoustic_amplitude_contract
+44/98 Test #32: acoustic_amplitude_contract ......................   Passed    0.00 sec
+      Start 33: rotational_excitation_contract
+45/98 Test #33: rotational_excitation_contract ...................   Passed    0.00 sec
+      Start 34: acoustic_directional_field_rotation_contract
+46/98 Test #34: acoustic_directional_field_rotation_contract .....   Passed    0.00 sec
+      Start 35: directional_radiation_equivalence
+47/98 Test #26: profile_spline_convergence .......................   Passed    0.80 sec
+      Start 36: wav_writer_contract
+48/98 Test #36: wav_writer_contract ..............................   Passed    0.00 sec
+      Start 37: stereo_listener_geometry_contract
+49/98 Test #37: stereo_listener_geometry_contract ................   Passed    0.00 sec
+      Start 38: stereo_coordinate_covariance_contract
+50/98 Test #38: stereo_coordinate_covariance_contract ............   Passed    0.00 sec
+      Start 39: clapper_stereo_frame_covariance_contract
+51/98 Test #39: clapper_stereo_frame_covariance_contract .........   Passed    0.22 sec
+      Start 40: stereo_polar_angle_approximation_contract
+52/98 Test #40: stereo_polar_angle_approximation_contract ........   Passed    0.03 sec
+      Start 41: polar_directional_field_interpolation_contract
+53/98 Test #41: polar_directional_field_interpolation_contract ...   Passed    0.25 sec
+      Start 42: finite_distance_radiation_contract
+54/98 Test #42: finite_distance_radiation_contract ...............   Passed    0.00 sec
+      Start 43: finite_distance_real_fem_contract
+55/98 Test #35: directional_radiation_equivalence ................   Passed    1.42 sec
+      Start 44: real_fem_polar_interpolation_contract
+56/98 Test #43: finite_distance_real_fem_contract ................   Passed    4.19 sec
+      Start 45: acoustic_field_cache_contract
+57/98 Test #45: acoustic_field_cache_contract ....................   Passed    0.00 sec
+      Start 46: bell_modal_profile_contract
+58/98 Test #46: bell_modal_profile_contract ......................   Passed    0.00 sec
+      Start 47: stereo_phase_delay_contract
+59/98 Test #47: stereo_phase_delay_contract ......................   Passed    0.00 sec
+      Start 48: excitation_model_audit
+60/98 Test #48: excitation_model_audit ...........................   Passed    0.00 sec
+      Start 49: localized_strike_spectrum_audit
+61/98 Test #49: localized_strike_spectrum_audit ..................   Passed    0.02 sec
+      Start 50: localized_strike_direction_contract
+62/98 Test #50: localized_strike_direction_contract ..............   Passed    0.02 sec
+      Start 51: circular_localized_strike_projection
+63/98 Test #44: real_fem_polar_interpolation_contract ............   Passed    4.90 sec
+      Start 53: multifidelity_calibration_probe
+64/98 Test #53: multifidelity_calibration_probe ..................   Passed    1.47 sec
+      Start 54: direct_elliptical_fem_evaluation
+65/98 Test #51: circular_localized_strike_projection .............   Passed    3.34 sec
+      Start 55: localized_strike_mesh_convergence
+66/98 Test #55: localized_strike_mesh_convergence ................   Passed    0.14 sec
+      Start 56: inner_normal_offset_contract
+67/98 Test #56: inner_normal_offset_contract .....................   Passed    0.01 sec
+      Start 57: acoustic_multipole_audit
+68/98 Test #57: acoustic_multipole_audit .........................   Passed    0.02 sec
+      Start 58: acoustic_radiation_audit
+69/98 Test #58: acoustic_radiation_audit .........................   Passed    0.02 sec
+      Start 59: internal_fem_sanity
+70/98 Test #59: internal_fem_sanity ..............................   Passed    0.02 sec
+      Start 60: ccx_current_geometry_usage
+71/98 Test #60: ccx_current_geometry_usage .......................   Passed    0.00 sec
+      Start 63: input_safety_contract
+72/98 Test #63: input_safety_contract ............................   Passed    0.00 sec
+      Start 64: material_preset_contract
+73/98 Test #64: material_preset_contract .........................   Passed    0.00 sec
+      Start 65: tradition_assessment
+74/98 Test #65: tradition_assessment .............................   Passed    0.00 sec
+      Start 66: model_layer_contract
+75/98 Test #54: direct_elliptical_fem_evaluation .................   Passed    0.61 sec
+      Start 67: modal_influence_contract
+76/98 Test #67: modal_influence_contract .........................   Passed    0.00 sec
+      Start 68: coordinate_morphing_contract
+77/98 Test #68: coordinate_morphing_contract .....................   Passed    0.00 sec
+      Start 69: mechanical_coordinate_morphing_contract
+78/98 Test #69: mechanical_coordinate_morphing_contract ..........   Passed    0.04 sec
+      Start 70: coordinate_morphing_ellipticity_sweep
+79/98 Test #66: model_layer_contract .............................   Passed    0.05 sec
+      Start 71: nonaxisymmetric_reference_mesh_contract
+80/98 Test #71: nonaxisymmetric_reference_mesh_contract ..........   Passed    0.00 sec
+      Start 72: ellipticity_search_policy_contract
+81/98 Test #72: ellipticity_search_policy_contract ...............   Passed    0.00 sec
+      Start 74: cylindrical_q4_element_contract
+82/98 Test #70: coordinate_morphing_ellipticity_sweep ............   Passed    0.02 sec
+      Start 76: cylindrical_bell_geometry_path_contract
+83/98 Test #74: cylindrical_q4_element_contract ..................   Passed    0.08 sec
+      Start 78: cylindrical_internal_solver_compare
+84/98 Test #78: cylindrical_internal_solver_compare ..............   Passed    0.02 sec
+      Start 81: modal_subspace_conditioning_contract
+85/98 Test #81: modal_subspace_conditioning_contract .............   Passed    0.00 sec
+      Start 84: cylindrical_unified_ellipticity_audit
+86/98 Test #76: cylindrical_bell_geometry_path_contract ..........   Passed    1.80 sec
+      Start 85: hammer_contact_contract
+87/98 Test #85: hammer_contact_contract ..........................   Passed    0.01 sec
+      Start 86: internal_clapper_geometry_contract
+88/98 Test #86: internal_clapper_geometry_contract ...............   Passed    0.00 sec
+      Start 87: inner_surface_modal_export_contract
+89/98 Test #87: inner_surface_modal_export_contract ..............   Passed    0.14 sec
+      Start 88: clapper_dynamics_contract
+90/98 Test #88: clapper_dynamics_contract ........................   Passed    0.06 sec
+      Start 89: clapper_modal_evaluator_contract
+91/98 Test #89: clapper_modal_evaluator_contract .................   Passed    0.00 sec
+      Start 90: clapper_candidate_data_reuse_contract
+92/98 Test #90: clapper_candidate_data_reuse_contract ............   Passed    0.00 sec
+      Start 91: clapper_acoustic_objective_contract
+93/98 Test #91: clapper_acoustic_objective_contract ..............   Passed    0.00 sec
+      Start 92: clapper_modal_spectrum_family_audit
+94/98 Test #92: clapper_modal_spectrum_family_audit ..............   Passed    2.97 sec
+      Start 93: contact_directional_audio_smoke
+95/98 Test #93: contact_directional_audio_smoke ..................   Passed    1.80 sec
+      Start 94: internal_clapper_audio_smoke

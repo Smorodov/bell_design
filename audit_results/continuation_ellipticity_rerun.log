@@ -1,0 +1,8 @@
+cylindrical_ellipticity_convergence: mesh/angular/harmonic refinement PASS
+mesh_2x2_to_4x4_max_rel=0.0531301 mesh_4x4_to_8x8_max_rel=0.020007
+angular_32_to_64_max_rel=4.96069e-06 angular_64_to_128_max_rel=4.32547e-06
+angular_matrix_K_32_to_64_rel=2.42535e-14 angular_matrix_K_64_to_128_rel=1.0206e-15
+angular_matrix_M_32_to_64_rel=3.07743e-15 angular_matrix_M_64_to_128_rel=1.25438e-15
+harmonics_01_to_012_max_rel=0.254813 harmonics_012_to_0123_max_rel=0.010684
+q=0.85 modes=4
+elapsed=38.45 sec max_rss=63156 KB exit=0

@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.2.184 — modal subspace invariance audit
+
+- Expanded the principal-angle contract with two deterministic 30-case sweeps: arbitrary in-plane basis rotations/permutations/sign changes/scalings, and controlled out-of-plane principal-angle perturbations.
+- The 30 basis-invariance cases retained unity similarity with worst absolute error 2.22e-16; the 30 calibrated-angle cases matched the analytical cosine with worst absolute error 2.22e-16.
+- Built and passed `modal_subspace_similarity_contract`, `modal_subspace_conditioning_contract`, `modal_tracker_fem_continuation`, and `cylindrical_modal_field_cross_mesh` with GCC 14.2 / C++17 Release.
+- Cross-mesh controlled FEM fixture retained minimum one-to-one overlap 0.999854 and two-mode subspace similarity 0.999966.
+- This is a numerical contract expansion, not a resolution of the 1.2.182 cross-solver calibration failure: the trace metric is not yet used for cross-solver assignment, and no 30-geometry recall promotion is claimed. Multi-fidelity shortlist remains disabled; production objective remains `western_five_partial`.
+
 ## 1.2.183 — degenerate boundary-trace subspace metric
 
 - Added a rank-1/rank-2 principal-angle similarity metric for boundary-trace subspaces.

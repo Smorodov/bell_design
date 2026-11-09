@@ -1,0 +1,3 @@
+Generated build_mesh_repeat/internal_clapper_smoke_repeat.wav | channels=1 | modes=32 | first contact=0.05756 s | contact=0.00098 s | peak force=23353.32315 N | strike height=69.2% | RMS=2.9e-01 | energy drift=6.4e-05
+Mode diagnostics: build_mesh_repeat/internal_clapper_smoke_repeat_modes.csv
+elapsed_seconds=2.85 exit_status=0

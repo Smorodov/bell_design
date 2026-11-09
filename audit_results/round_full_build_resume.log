@@ -1,0 +1,168 @@
+[  5%] Built target bell_synthesis
+[  7%] Built target sparse_matrix_contract
+[  7%] Built target sparse_eigensolver_contract
+[ 21%] Built target bell_core
+[ 21%] Built target rcm_initial_vector_contract
+[ 22%] Built target sparse_solver_production_contract
+[ 23%] Built target sparse_conditioning_audit
+[ 24%] Built target sparse_solver_scaling
+[ 24%] Built target sparse_pruning_audit
+[ 25%] Built target rcm_solver_benchmark
+[ 26%] Built target eigenpair_integrity
+[ 27%] Built target rotational_reference_frame_audit
+[ 28%] Built target low_frequency_mode_policy
+[ 29%] Built target meridional_influence_audit
+[ 30%] Built target modal_physics_validation
+[ 31%] Built target multifidelity_calibration_probe
+[ 32%] Built target modal_family_tracking
+[ 33%] Built target modal_objective_convergence
+[ 34%] Built target optimizer_shape_scale_audit
+[ 35%] Built target acoustic_modal_validation
+[ 35%] Built target acoustic_radiation_audit
+[ 36%] Built target profile_spline_convergence
+[ 37%] Built target castability_geometry_contract
+[ 37%] Built target acoustic_multipole_audit
+[ 38%] Built target acoustic_pressure_phase_contract
+[ 39%] Built target acoustic_pressure_contract
+[ 40%] Built target acoustic_pressure_scaling_audit
+[ 40%] Built target rotational_excitation_contract
+[ 41%] Built target acoustic_directional_field_rotation_contract
+[ 41%] Built target acoustic_amplitude_contract
+[ 42%] Built target stereo_listener_geometry_contract
+[ 43%] Built target stereo_coordinate_covariance_contract
+[ 44%] Built target clapper_stereo_frame_covariance_contract
+[ 44%] Built target stereo_polar_angle_approximation_contract
+[ 45%] Built target polar_directional_field_interpolation_contract
+[ 46%] Built target finite_distance_radiation_contract
+[ 47%] Built target finite_distance_real_fem_contract
+[ 48%] Built target real_fem_polar_interpolation_contract
+[ 48%] Built target bell_modal_profile_contract
+[ 49%] Built target acoustic_field_cache_contract
+[ 49%] Built target excitation_model_audit
+[ 50%] Built target stereo_phase_delay_contract
+[ 51%] Built target circular_localized_strike_projection
+[ 51%] Built target localized_strike_direction_contract
+[ 52%] Built target localized_strike_spectrum_audit
+[ 53%] Built target modal_impulse_response_contract
+[ 54%] Built target modal_decay_contract
+[ 55%] Built target localized_strike_mesh_convergence
+[ 56%] Built target inner_normal_offset_contract
+[ 56%] Built target ccx_current_geometry
+[ 57%] Built target internal_fem_compare
+[ 57%] Built target mesh_convergence
+[ 57%] Built target material_preset_contract
+[ 58%] Built target thickness_mesh_convergence
+[ 59%] Built target input_safety_contract
+[ 60%] Built target model_layer_contract
+[ 61%] Built target tradition_assessment
+[ 61%] Built target modal_influence_contract
+[ 61%] Built target coordinate_morphing_contract
+[ 62%] Building CXX object CMakeFiles/coordinate_morphing_ellipticity_sweep.dir/tests/coordinate_morphing_ellipticity_sweep.cpp.o
+[ 63%] Building CXX object CMakeFiles/mechanical_coordinate_morphing_contract.dir/tests/mechanical_coordinate_morphing_contract.cpp.o
+[ 64%] Built target cylindrical_strain_contract
+[ 65%] Building CXX object CMakeFiles/cylindrical_q4_element_contract.dir/tests/cylindrical_q4_element_contract.cpp.o
+[ 66%] Built target cylindrical_global_assembly_contract
+[ 67%] Building CXX object CMakeFiles/cylindrical_bell_geometry_path_contract.dir/tests/cylindrical_bell_geometry_path_contract.cpp.o
+[ 67%] Linking CXX executable cylindrical_bell_geometry_path_contract
+[ 67%] Built target cylindrical_bell_geometry_path_contract
+[ 68%] Built target cylindrical_global_modes_contract
+[ 69%] Building CXX object CMakeFiles/cylindrical_internal_solver_compare.dir/tests/cylindrical_internal_solver_compare.cpp.o
+[ 69%] Linking CXX executable coordinate_morphing_ellipticity_sweep
+[ 69%] Linking CXX executable cylindrical_q4_element_contract
+[ 69%] Built target coordinate_morphing_ellipticity_sweep
+[ 70%] Built target cylindrical_modal_family_tracking
+[ 70%] Built target modal_subspace_similarity_contract
+[ 70%] Building CXX object CMakeFiles/modal_subspace_conditioning_contract.dir/tests/modal_subspace_conditioning_contract.cpp.o
+[ 70%] Built target cylindrical_q4_element_contract
+[ 70%] Built target cylindrical_bell_geometry_modal_tracking
+[ 70%] Building CXX object CMakeFiles/cylindrical_bell_geometry_convergence.dir/tests/cylindrical_bell_geometry_convergence.cpp.o
+[ 70%] Linking CXX executable mechanical_coordinate_morphing_contract
+[ 70%] Built target mechanical_coordinate_morphing_contract
+[ 70%] Built target cylindrical_harmonic_family_continuation
+[ 71%] Building CXX object CMakeFiles/cylindrical_ellipticity_convergence.dir/tests/cylindrical_ellipticity_convergence.cpp.o
+[ 71%] Linking CXX executable cylindrical_internal_solver_compare
+[ 71%] Built target cylindrical_internal_solver_compare
+[ 71%] Building CXX object CMakeFiles/cylindrical_unified_ellipticity_audit.dir/tests/cylindrical_unified_ellipticity_audit.cpp.o
+[ 72%] Linking CXX executable cylindrical_bell_geometry_convergence
+[ 73%] Linking CXX executable modal_subspace_conditioning_contract
+[ 73%] Built target cylindrical_bell_geometry_convergence
+[ 73%] Built target modal_subspace_conditioning_contract
+[ 73%] Building CXX object CMakeFiles/ellipticity_search_policy_contract.dir/tests/ellipticity_search_policy_contract.cpp.o
+[ 73%] Building CXX object CMakeFiles/bell_core_smoke.dir/tests/bell_core_smoke.cpp.o
+[ 73%] Linking CXX executable cylindrical_ellipticity_convergence
+[ 74%] Linking CXX executable ellipticity_search_policy_contract
+[ 74%] Built target ellipticity_search_policy_contract
+[ 74%] Building CXX object CMakeFiles/hammer_contact_contract.dir/tests/hammer_contact_contract.cpp.o
+[ 74%] Built target cylindrical_ellipticity_convergence
+[ 74%] Building CXX object CMakeFiles/internal_clapper_geometry_contract.dir/tests/internal_clapper_geometry_contract.cpp.o
+[ 75%] Linking CXX executable hammer_contact_contract
+[ 75%] Built target hammer_contact_contract
+[ 75%] Building CXX object CMakeFiles/inner_surface_modal_export_contract.dir/tests/inner_surface_modal_export_contract.cpp.o
+[ 76%] Linking CXX executable cylindrical_unified_ellipticity_audit
+[ 77%] Linking CXX executable internal_clapper_geometry_contract
+[ 77%] Built target cylindrical_unified_ellipticity_audit
+[ 77%] Building CXX object CMakeFiles/clapper_dynamics_contract.dir/tests/clapper_dynamics_contract.cpp.o
+[ 78%] Linking CXX executable bell_core_smoke
+[ 78%] Built target bell_core_smoke
+[ 78%] Built target internal_clapper_geometry_contract
+[ 78%] Linking CXX executable inner_surface_modal_export_contract
+[ 78%] Building CXX object CMakeFiles/clapper_candidate_data_reuse_contract.dir/tests/clapper_candidate_data_reuse_contract.cpp.o
+[ 79%] Building CXX object CMakeFiles/clapper_modal_evaluator_contract.dir/tests/clapper_modal_evaluator_contract.cpp.o
+[ 79%] Built target inner_surface_modal_export_contract
+[ 79%] Building CXX object CMakeFiles/clapper_acoustic_objective_contract.dir/tests/clapper_acoustic_objective_contract.cpp.o
+[ 79%] Linking CXX executable clapper_dynamics_contract
+[ 79%] Built target clapper_dynamics_contract
+[ 80%] Building CXX object CMakeFiles/clapper_modal_spectrum_family_audit.dir/tests/clapper_modal_spectrum_family_audit.cpp.o
+[ 81%] Linking CXX executable clapper_candidate_data_reuse_contract
+[ 81%] Linking CXX executable clapper_modal_evaluator_contract
+[ 81%] Built target clapper_modal_evaluator_contract
+[ 81%] Built target clapper_candidate_data_reuse_contract
+[ 82%] Built target round_geometry_dataset
+[ 83%] Built target round_geometry_modal_convergence
+[ 84%] Building CXX object CMakeFiles/synthesis_sdk_link_contract.dir/tests/synthesis_sdk_link_contract.cpp.o
+[ 85%] Building CXX object CMakeFiles/bell.dir/src/main.cpp.o
+[ 86%] Linking CXX executable clapper_acoustic_objective_contract
+[ 86%] Built target clapper_acoustic_objective_contract
+[ 86%] Building CXX object CMakeFiles/bell.dir/src/commands/optimize.cpp.o
+[ 86%] Linking CXX executable clapper_modal_spectrum_family_audit
+[ 86%] Built target clapper_modal_spectrum_family_audit
+[ 87%] Building CXX object CMakeFiles/bell.dir/src/commands/synthesize.cpp.o
+[ 87%] Linking CXX executable synthesis_sdk_link_contract
+[ 88%] Built target bell_experimental
+[ 88%] Building CXX object CMakeFiles/bell_validation.dir/src/validation/nonaxisymmetric_reference.cpp.o
+[ 88%] Built target synthesis_sdk_link_contract
+[ 88%] Building CXX object CMakeFiles/bell.dir/src/commands/synthesize_geometry.cpp.o
+[ 89%] Linking CXX static library libbell_validation.a
+[ 89%] Built target bell_validation
+[ 89%] Building CXX object CMakeFiles/wav_writer_contract.dir/tests/wav_writer_contract.cpp.o
+[ 89%] Building CXX object CMakeFiles/bell.dir/src/commands/synthesize_contact.cpp.o
+[ 90%] Building CXX object CMakeFiles/bell.dir/src/synthesis/bell_synthesis.cpp.o
+[ 91%] Building CXX object CMakeFiles/directional_radiation_equivalence.dir/tests/directional_radiation_equivalence.cpp.o
+[ 92%] Linking CXX executable wav_writer_contract
+[ 92%] Built target wav_writer_contract
+[ 93%] Built target cylindrical_axis_regularity_contract
+[ 93%] Building CXX object CMakeFiles/direct_elliptical_fem_evaluation.dir/tests/direct_elliptical_fem_evaluation.cpp.o
+[ 93%] Linking CXX executable directional_radiation_equivalence
+[ 93%] Built target directional_radiation_equivalence
+[ 94%] Building CXX object CMakeFiles/rcm_ordering_audit.dir/tests/rcm_ordering_audit.cpp.o
+[ 95%] Built target matrix_assembly_audit
+[ 96%] Built target sparse_fem_solver_audit
+[ 96%] Built target sparse_dense_mode_comparison
+[ 97%] Built target sparse_solver_robustness
+[ 97%] Built target sparse_solver_scaling_contract
+[ 97%] Building CXX object CMakeFiles/nonaxisymmetric_reference_mesh_contract.dir/tests/nonaxisymmetric_reference_mesh_contract.cpp.o
+[ 97%] Linking CXX executable nonaxisymmetric_reference_mesh_contract
+[ 97%] Linking CXX executable rcm_ordering_audit
+[ 97%] Built target rcm_ordering_audit
+[ 98%] Built target modal_state_tracker_contract
+[ 98%] Built target nonaxisymmetric_reference_mesh_contract
+[ 99%] Building CXX object CMakeFiles/modal_tracker_fem_continuation.dir/tests/modal_tracker_fem_continuation.cpp.o
+[100%] Built target cylindrical_modal_field_cross_mesh
+[100%] Linking CXX executable direct_elliptical_fem_evaluation
+[100%] Built target cylindrical_modal_field_fem_matrix
+[100%] Built target direct_elliptical_fem_evaluation
+[100%] Linking CXX executable modal_tracker_fem_continuation
+[100%] Built target modal_tracker_fem_continuation
+[100%] Linking CXX executable bell
+[100%] Built target bell
+elapsed_seconds=19.90 max_rss_kb=221288 exit_status=0
