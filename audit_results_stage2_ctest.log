@@ -1,9 +1,0 @@
-Test project /mnt/data/bell_stage2/bell_continue/build_modal_family_stage2
-    Start  51: circular_localized_strike_projection
-1/2 Test  #51: circular_localized_strike_projection ...   Passed    3.75 sec
-    Start 100: modal_family_adapter_contract
-2/2 Test #100: modal_family_adapter_contract ..........   Passed    0.00 sec
-
-100% tests passed, 0 tests failed out of 2
-
-Total Test time (real) =   3.76 sec

@@ -1,4 +1,0 @@
-Full configured Release build attempted with GCC 14.2 / CMake 3.31.6, parallel=2.
-Build progressed to approximately 67% before the execution time limit terminated the build processes.
-No compiler diagnostic indicating a source error was emitted before termination.
-Full build: NOT CONFIRMED. Full 99-test CTest: NOT RUN.

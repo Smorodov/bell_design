@@ -1,2 +1,0 @@
-geometry_index,tag,min_fullfield_overlap,mean_fullfield_overlap,min_boundary_trace_overlap,mean_boundary_trace_overlap,min_boundary_pool_overlap,boundary_fullfield_assignment_agree,min_common_volume_fraction,max_first8_frequency_error,fast_objective,fullfield_matched_direct_objective,assignment
-1,edge_tall_wide,1,1,1,1,1,1,1,2.03949446834e-14,0.0384993987739,0.0384993987739,"1->9;2->16;3->26;4->30;5->41;6->51;7->59;8->68"

@@ -1,0 +1,20 @@
+{
+  "schema_version": 2,
+  "profile_id": "custom_five_mode_example",
+  "display_name": "Custom five-mode example",
+  "source": {
+    "kind": "user_defined",
+    "description": "Illustrative profile; not a measured bell"
+  },
+  "frequency_reference": {
+    "mode": { "selector": "sorted_index", "index": 1 },
+    "target_hz": 440.0
+  },
+  "frequency_targets": [
+    { "mode": { "selector": "sorted_index", "index": 0 }, "ratio": 0.51, "weight": 1.0, "label": "F1" },
+    { "mode": { "selector": "sorted_index", "index": 2 }, "ratio": 1.26, "weight": 1.0, "label": "F3" },
+    { "mode": { "selector": "sorted_index", "index": 3 }, "ratio": 1.64, "weight": 1.0, "label": "F4" },
+    { "mode": { "selector": "sorted_index", "index": 4 }, "ratio": 2.19, "weight": 1.0, "label": "F5" }
+  ],
+  "amplitude_targets": []
+}

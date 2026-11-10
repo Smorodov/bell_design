@@ -206,8 +206,8 @@ bool EvolutionaryOptimizer::loadBestFromFile(const std::string& filename) {
     }
     
     double prime_freq = 0.0;
-    if (first_data.modes.size() > 1) {
-        prime_freq = first_data.modes[1].frequency_hz;
+    if (targets_.frequency_reference_mode_index < first_data.modes.size()) {
+        prime_freq = first_data.modes[targets_.frequency_reference_mode_index].frequency_hz;
     }
     
     if (prime_freq < 1.0) {
@@ -215,7 +215,7 @@ bool EvolutionaryOptimizer::loadBestFromFile(const std::string& filename) {
         return false;
     }
     
-    std::cout << std::fixed << std::setprecision(2) << "   Current Prime: " << prime_freq << " Hz\n";
+    std::cout << std::fixed << std::setprecision(2) << "   Current reference mode[" << targets_.frequency_reference_mode_index << "]: " << prime_freq << " Hz\n";
     
     // ============================================================
     // 2. ВЫЧИСЛЯЕМ МАСШТАБ (ПРАВИЛЬНАЯ ФОРМУЛА!)
@@ -280,7 +280,8 @@ bool EvolutionaryOptimizer::loadBestFromFile(const std::string& filename) {
     
     std::cout << "✅ Rescaled successfully!\n";
     std::cout << std::fixed << std::setprecision(6) << "   New error: " << best_error_ << "\n";
-    std::cout << std::fixed << std::setprecision(2) << "   New Prime: " << best_modal_data_.modes[1].frequency_hz << " Hz\n";
+    if (targets_.frequency_reference_mode_index < best_modal_data_.modes.size())
+        std::cout << std::fixed << std::setprecision(2) << "   New reference mode[" << targets_.frequency_reference_mode_index << "]: " << best_modal_data_.modes[targets_.frequency_reference_mode_index].frequency_hz << " Hz\n";
     
     saveBestResult();
     
@@ -503,42 +504,49 @@ EvolutionaryOptimizer::Candidate EvolutionaryOptimizer::createNearCandidate(cons
 // ВЫЧИСЛЕНИЕ ОШИБКИ (ТОЛЬКО СООТНОШЕНИЯ + ШТРАФЫ)
 // ============================================================
 double EvolutionaryOptimizer::computeError(const ModalData& modal_data, const BellGeometry& geometry) {
-    if (modal_data.modes.size() < 5) return 1e9;
-
     const auto& modes = modal_data.modes;
-    const double hum_freq = modes[0].frequency_hz;
-    const double hum_amp = modes[0].amplitude;
-    const double prime_freq = modes[1].frequency_hz;
-    if (hum_freq < BellConstants::MIN_FREQ_HZ || prime_freq < BellConstants::MIN_FREQ_HZ ||
-        hum_amp <= 1e-12) return 1e9;
+    const std::size_t reference = targets_.frequency_reference_mode_index;
+    if (reference >= modes.size() || modes[reference].frequency_hz < BellConstants::MIN_FREQ_HZ)
+        return BellConstants::ERROR_INVALID;
+    const double reference_freq = modes[reference].frequency_hz;
 
-    // Modal ratios are positive quantities. Log-relative error treats a +10%
-    // and -10% deviation symmetrically and avoids the saturation of the old
-    // sigmoid penalty.
+    std::vector<FrequencyTarget> frequency_targets = targets_.frequency_targets;
+    std::vector<AmplitudeTarget> amplitude_targets = targets_.amplitude_targets;
+    if (frequency_targets.empty() && amplitude_targets.empty()) {
+        const std::size_t fi[] = {0, 2, 3, 4};
+        const std::size_t ai[] = {1, 2, 3, 4};
+        for (std::size_t i = 0; i < 4; ++i) {
+            frequency_targets.push_back({fi[i], targets_.freq_ratios[i], targets_.freq_weights[i], {}});
+            amplitude_targets.push_back({ai[i], 0, targets_.amp_ratios[i], targets_.amp_weights[i], {}});
+        }
+    }
     double freq_error = 0.0;
-    const int freq_indices[4] = {0, 2, 3, 4};
-    for (int i = 0; i < 4; ++i) {
-        const int idx = freq_indices[i];
-        if (idx >= static_cast<int>(modes.size()) || targets_.freq_ratios[i] <= 0.0) return 1e9;
-        const double ratio = modes[idx].frequency_hz / prime_freq;
-        if (!(ratio > 0.0) || !std::isfinite(ratio)) return 1e9;
-        const double e = std::log(ratio / targets_.freq_ratios[i]);
-        freq_error += targets_.freq_weights[i] * e * e;
+    for (const auto& target : frequency_targets) {
+        if (target.weight == 0.0) continue;
+        if (target.mode_index >= modes.size()) return BellConstants::ERROR_INVALID;
+        const double actual = modes[target.mode_index].frequency_hz / reference_freq;
+        if (!(actual > 0.0) || !std::isfinite(actual)) return BellConstants::ERROR_INVALID;
+        const double e = std::log(actual / target.ratio);
+        freq_error += target.weight * e * e;
     }
 
     double amp_error = 0.0;
-    const int amp_indices[4] = {1, 2, 3, 4};
-    for (int i = 0; i < 4; ++i) {
-        const int idx = amp_indices[i];
-        if (idx >= static_cast<int>(modes.size()) || targets_.amp_ratios[i] <= 0.0) return 1e9;
-        const double ratio = modes[idx].amplitude / hum_amp;
-        if (!(ratio > 0.0) || !std::isfinite(ratio)) return 1e9;
-        const double e = std::log(ratio / targets_.amp_ratios[i]);
-        amp_error += targets_.amp_weights[i] * e * e;
+    for (const auto& target : amplitude_targets) {
+        if (target.weight == 0.0) continue;
+        if (target.mode_index >= modes.size() || target.reference_mode_index >= modes.size())
+            return BellConstants::ERROR_INVALID;
+        const double numerator = modes[target.mode_index].amplitude;
+        const double denominator = modes[target.reference_mode_index].amplitude;
+        if (!(numerator > 1e-12) || !(denominator > 1e-12) ||
+            !std::isfinite(numerator) || !std::isfinite(denominator))
+            return BellConstants::ERROR_INVALID;
+        const double actual = numerator / denominator;
+        if (!(actual > 0.0) || !std::isfinite(actual)) return BellConstants::ERROR_INVALID;
+        const double e = std::log(actual / target.ratio);
+        amp_error += target.weight * e * e;
     }
 
-    // The geometry generator performs the authoritative derivative-based slope
-    // check. Keep the objective only responsible for smooth proportion penalty.
+    // Keep the established smooth proportion penalty independent of profile metadata.
     double proportion_error = 0.0;
     const double diameter_ratio = 2.0 * geometry.R_mouth / geometry.H;
     if (diameter_ratio < BellConstants::DIAMETER_RATIO_MIN) {
@@ -548,7 +556,6 @@ double EvolutionaryOptimizer::computeError(const ModalData& modal_data, const Be
         const double e = std::log(diameter_ratio / BellConstants::DIAMETER_RATIO_MAX);
         proportion_error += e * e;
     }
-
     return freq_error + amp_error + proportion_error;
 }
 
@@ -709,8 +716,8 @@ double EvolutionaryOptimizer::evaluateCandidate(BellGeometry& geometry, ModalDat
     }
 
     double prime_freq = 0.0;
-    if (raw_data.modes.size() > 1) {
-        prime_freq = raw_data.modes[1].frequency_hz;
+    if (targets_.frequency_reference_mode_index < raw_data.modes.size()) {
+        prime_freq = raw_data.modes[targets_.frequency_reference_mode_index].frequency_hz;
     }
     
     if (prime_freq < 1.0) {
@@ -1042,44 +1049,32 @@ void EvolutionaryOptimizer::run() {
 // ВЫВОД РЕЗУЛЬТАТОВ
 // ============================================================
 void EvolutionaryOptimizer::printHeader() {
-    std::cout << "\n";
-    std::cout << std::right
+    std::cout << "\n" << std::right
               << std::setw(4) << "Gen" << " " << std::setw(12) << "Error"
               << " " << std::setw(10) << "H" << " " << std::setw(10) << "Rm"
               << " " << std::setw(10) << "t_top" << " " << std::setw(10) << "t_bot"
-              << " " << std::setw(12) << "Hum" << " " << std::setw(12) << "Prime"
-              << " " << std::setw(12) << "Tertia" << " " << std::setw(12) << "Quinta"
-              << " " << std::setw(12) << "Nominal" << "\n";
-    std::cout << std::string(120, '-') << "\n";
+              << " " << std::setw(12) << "Mode0"
+              << " " << std::setw(12) << "Reference" << "\n";
+    std::cout << std::string(100, '-') << "\n";
 }
 
 void EvolutionaryOptimizer::printGeneration(int gen, const Candidate& best) {
-    if (best.error >= 1e8) {
+    if (best.error >= BellConstants::ERROR_THRESHOLD_VALID) {
         std::cout << std::right << std::setw(4) << gen << " " << std::setw(12) << "FAILED" << "\n";
         return;
     }
-    
     const auto& modes = best.modal_data.modes;
-    
-    double hum_freq = 0.0, prime_freq = 0.0, tertia_freq = 0.0, quinta_freq = 0.0, nominal_freq = 0.0;
-    
-    if (modes.size() > 0) hum_freq = modes[0].frequency_hz;
-    if (modes.size() > 1) prime_freq = modes[1].frequency_hz;
-    if (modes.size() > 2) tertia_freq = modes[2].frequency_hz;
-    if (modes.size() > 3) quinta_freq = modes[3].frequency_hz;
-    if (modes.size() > 4) nominal_freq = modes[4].frequency_hz;
-    
+    const double mode0 = modes.empty() ? 0.0 : modes[0].frequency_hz;
+    const double reference = targets_.frequency_reference_mode_index < modes.size()
+        ? modes[targets_.frequency_reference_mode_index].frequency_hz : 0.0;
     std::cout << std::right << std::setw(4) << gen
               << std::setw(12) << std::fixed << std::setprecision(4) << best.error
               << std::setw(10) << std::setprecision(1) << best.geometry.H
               << std::setw(10) << best.geometry.R_mouth
               << std::setw(10) << best.geometry.t_top
               << std::setw(10) << best.geometry.t_bottom
-              << std::setw(12) << hum_freq
-              << std::setw(12) << prime_freq
-              << std::setw(12) << tertia_freq
-              << std::setw(12) << quinta_freq
-              << std::setw(12) << nominal_freq << "\n";
+              << std::setw(12) << mode0
+              << std::setw(12) << reference << "\n";
 }
 
 void EvolutionaryOptimizer::printFinal(const Candidate& best) {
@@ -1099,15 +1094,14 @@ void EvolutionaryOptimizer::printFinal(const Candidate& best) {
     }
     std::cout << "\n";
     
-    if (best.modal_data.modes.size() >= 5) {
-        std::cout << "\n  Frequencies:\n";
-        const char* names[] = {"Hum", "Prime", "Tertia", "Quinta", "Nominal"};
-        for (int i = 0; i < 5 && i < (int)best.modal_data.modes.size(); ++i) {
-            std::cout << std::fixed << std::setprecision(2) << "    " << names[i] << ": " << best.modal_data.modes[i].frequency_hz << " Hz";
-            if (i > 0) {
-                double ratio = best.modal_data.modes[i].frequency_hz / best.modal_data.modes[1].frequency_hz;
-                std::cout << std::fixed << std::setprecision(3) << " (ratio: " << ratio << ")";
-            }
+    if (!best.modal_data.modes.empty()) {
+        std::cout << "\n  Sorted modal frequencies:\n";
+        const std::size_t count = std::min<std::size_t>(5, best.modal_data.modes.size());
+        for (std::size_t i = 0; i < count; ++i) {
+            std::cout << std::fixed << std::setprecision(2) << "    mode[" << i << "]: "
+                      << best.modal_data.modes[i].frequency_hz << " Hz";
+            if (i == targets_.frequency_reference_mode_index)
+                std::cout << " (frequency reference)";
             std::cout << "\n";
         }
     }

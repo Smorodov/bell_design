@@ -1,5 +1,0 @@
-Test: cylindrical_ellipticity_convergence (CTest #79)
-Source: tests/cylindrical_ellipticity_convergence.cpp
-Observed: did not complete within the 120-second isolated rerun; it also remained active when the first full-suite run reached its execution limit.
-The test performs several sparse FEM solves and angular-quadrature matrix comparisons for q=0.85 with harmonics {0,1,2,3}. This is an elliptic synthetic patch, not the target circular bell geometry.
-Status: TIMEOUT / NOT CONFIRMED. This is not recorded as PASS or FAIL.

@@ -1,11 +1,31 @@
 {
-    "tuning_model": "western_five_partial_reference",
+    "tuning_model": "russian_orthodox_sysoi_2000_experimental",
     "tradition": "russian_orthodox",
-    "tuning_name": "orthodox_rich_spectrum_reference",
+    "tuning_name": "russian_orthodox_sysoi_experimental_440Hz",
     "prime_freq_target": 440.0,
-    "freq_ratios": [0.5, 1.2, 1.5, 2.0],
-    "amp_ratios": [0.8, 0.6, 0.4, 0.2],
-    "freq_weights": [0.25, 0.25, 0.25, 0.25],
-    "amp_weights": [0.5, 0.5, 0.5, 0.5],
-    "note": "Reference-only modal target. Russian Orthodox bells are not defined by one universal five-partial tuning; use this for geometry/sound comparison, not historical certification."
+    "freq_ratios": [
+        0.51,
+        1.26,
+        1.64,
+        2.19
+    ],
+    "amp_ratios": [
+        0.8,
+        0.6,
+        0.4,
+        0.2
+    ],
+    "freq_weights": [
+        1.0,
+        1.0,
+        1.0,
+        1.0
+    ],
+    "amp_weights": [
+        0.0,
+        0.0,
+        0.0,
+        0.0
+    ],
+    "note": "Experimental frequency-ratio target based on the measured Sysoi bell at Rostov Uspensky Cathedral, Table 1 in Aldoshina & Nicanorov, AES 108th Convention preprint 5117 (2000): F1/F2=0.51, F3/F2=1.26, F4/F2=1.64, F5/F2=2.19. F2 is used as prime. This is one measured historical exemplar, not a universal Russian Orthodox tuning law. Amplitude terms are disabled because the published SPL values are strike/time/measurement dependent and are not a transferable modal-amplitude target."
 }

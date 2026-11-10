@@ -1,12 +1,12 @@
 {
-    "population_size": 8,
-    "generations": 6,
-    "num_elite": 3,
-    "mutation_probability": 0.2,
-    "mutation_strength": 0.08,
+    "population_size": 50,
+    "generations": 50,
+    "num_elite": 10,
+    "mutation_probability": 0.1,
+    "mutation_strength": 0.05,
     "num_knots": 9,
     "seed_family": "orthodox",
     "deterministic": true,
-    "seed": 18071991,
+    "seed": 20000219,
     "material": "bell_bronze_reference"
 }

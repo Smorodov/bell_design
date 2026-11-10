@@ -8,12 +8,12 @@ On Windows with MSYS2 UCRT64 and CMake available:
 build.cmd
 ```
 
-The executable is `build/bell.exe`. The script configures, builds and runs the registered CTest suite. `test.cmd` reruns the suite without rebuilding; `test_convergence.cmd [all|mesh|thickness]` runs the two mesh-refinement diagnostics; `test_ccx_current_geometry.cmd` runs the optional external CalculiX comparison. For an application-only build, configure CMake with `-DBUILD_SMOKE_TESTS=OFF` and build target `bell`.
+The executable is `build/bell.exe`. `build.cmd` configures and builds the project; it does **not** run CTest. Run `test.cmd` separately to execute the registered CTest suite; `test_convergence.cmd [all|mesh|thickness]` runs the two mesh-refinement diagnostics; `test_ccx_current_geometry.cmd` runs the optional external CalculiX comparison. For an application-only build, configure CMake with `-DBUILD_SMOKE_TESTS=OFF` and build target `bell`.
 
 ## 2. Commands
 
 ```text
-bell optimize [--solver=ccx|internal] [--workdir <directory>]
+bell optimize [--solver=ccx|internal] [--workdir <directory>] [--evolution <file>] [--targets <file>]
 bell synth [file.dat] [--workdir <directory>]
 bell synth-geometry [geometry.json] [--ellipticity q] [--output file.wav] [--workdir <directory>]
 bell --help
@@ -30,13 +30,47 @@ Typical internal-solver workflow from the project root:
 bell.cmd optimize --solver=internal --workdir bells
 ```
 
+The `--workdir` option is applied once by the `optimize` command. Relative configuration paths are resolved from that directory. The command accepts explicit configuration paths:
+
+```bat
+bell.cmd optimize --solver=internal --workdir bells --evolution evolution_orthodox.json --targets targets_orthodox.json
+```
+
+Do not start several optimization jobs in the same working directory: each run writes `best_geometry.json` and `best_bell.dat` there and may load an existing `best_geometry.json` as its starting point. Use a separate working directory for each independent run.
+
 The optional CalculiX reference workflow is:
 
 ```bat
 bell.cmd optimize --solver=ccx --workdir bells
 ```
 
-The `bells/` directory contains geometry seeds, evolution settings and modal target files. The optimizer writes its best geometry and modal data there. The Western `western_five_partial` objective is the production objective. Chinese target files are experimental specifications and are not a production two-tone optimizer path.
+The `bells/` directory contains geometry seeds, evolution settings and modal target files. Acoustic target profiles are conceptually independent from geometry seed families; the current Stage 8 target loader still has a legacy coupling through `tradition`, which is scheduled for migration. The optimizer writes its best geometry and modal data to the active working directory. The Western `western_five_partial` objective is the production objective. Chinese target files are experimental specifications and are not a production two-tone optimizer path.
+
+### Ready-to-run Windows examples
+
+After `build.cmd`, launch any one of these from the project root:
+
+```bat
+run_western_220.cmd
+run_western_440.cmd
+run_western_880.cmd
+run_orthodox_220.cmd
+run_orthodox_440.cmd
+run_orthodox_880.cmd
+```
+
+Подробная русская инструкция: `docs/RUN_OPTIMIZATION_EXAMPLES_RU.md`.
+
+Or run all six sequentially with `run_all_demo_cases.cmd`. The generic launcher is also available:
+
+```bat
+run_bell_case.cmd western 440
+run_bell_case.cmd orthodox 440
+```
+
+Every case gets its own directory under `runs\` with copies of the exact evolution and target JSON files. Its `best_geometry.json`, generated audio and reports therefore do not overwrite another case. `best_bell.dat` is created only when the selected solver supplies a source modal-data file; the internal solver does not guarantee it. If you rerun the same case, the existing `best_geometry.json` is used as an initial guess; remove or rename that case's `runs\<profile>_<frequency>Hz` directory yourself if you want a clean run.
+
+**Important limitation of the Orthodox example:** its ratios `[0.51, 1.26, 1.64, 2.19]` are an experimental reference derived from one measured historical bell (Sysoi, Rostov Uspensky Cathedral; Aldoshina & Nicanorov, AES 2000), not a universal Orthodox tuning law. The current executable still uses fixed sorted-mode slots as provisional F1–F5 proxies. Amplitude target weights are zero. The geometry seed family is selected independently through `evolution.seed_family`; legacy `tradition` is only a fallback when no seed family is supplied, and conflicting settings are rejected. The sorted slots remain provisional proxies rather than validated physical mode-family identities. See `docs/TUNING_PROFILES.md` and `docs/TARGET_PROFILE_ARCHITECTURE.md`.
 
 ## 4. Synthesis from modal data
 
@@ -63,9 +97,9 @@ This workflow evaluates the supplied geometry and synthesizes a listening result
 ## 6. Configuration and output level
 
 - `evolution*.json` controls evolutionary search settings.
-- `targets*.json` defines modal tuning targets.
+- `targets*.json` defines acoustic modal targets. For variable-length v2 profiles, see `examples/target_profiles/custom_v2_example.json`. The CLI accepts legacy v1 files and selector-based v2 files. V1 retains the historical four-target mapping. V2 supports variable-length target lists and explicit frequency/amplitude reference selectors, currently with `sorted_index` selectors only. See `docs/TARGET_PROFILE_ARCHITECTURE.md` and `examples/target_profiles/custom_v2_example.json`.
 - `synthesis.json` controls sample rate, oversampling, duration, losses, normalization and optional reverb.
-- `best_geometry.json` stores the optimized geometry; `best_bell.dat` stores modal data for synthesis.
+- `best_geometry.json` stores the optimized geometry. `best_bell.dat` is an optional solver-produced modal-data file and is not guaranteed with the internal solver. The demonstration runner synthesizes audio from `best_geometry.json` using `synth-geometry` and `synth-contact`.
 
 `target_peak` controls the final digital peak level. Peak normalization is a presentation-level operation; it does not represent calibrated sound pressure level. Reverb is a post-effect and is disabled by default. The generated WAV is mono.
 
@@ -73,7 +107,7 @@ This workflow evaluates the supplied geometry and synthesizes a listening result
 
 The production optimizer's meridional generalized influence is a simplified excitation proxy. The Chinese localized-strike model is a separate diagnostic and is not yet used by the production optimizer. Likewise, current acoustic transfer and synthesis are reduced-order models, not calibrated predictions of sound pressure at a specified distance.
 
-For mathematical assumptions and known limits, see `MATHEMATICAL_AND_ALGORITHMIC_FOUNDATIONS.md` and `VALIDATION.md`.
+Invalid or missing target/evolution JSON files now stop the optimization with a non-zero exit code; the program does not silently continue with defaults. For mathematical assumptions and known limits, see `MATHEMATICAL_AND_ALGORITHMIC_FOUNDATIONS.md` and `VALIDATION.md`.
 
 ## Материал
 

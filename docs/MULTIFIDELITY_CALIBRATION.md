@@ -110,3 +110,29 @@ mass-weighted subspace overlap on compatible accurate FEM fields, and then rerun
 the 30-case probe. A boundary metric that is rotation-invariant is not, by itself,
 proof that it preserves physical modal-family identity. No screening or candidate
 rejection is enabled in 1.2.183.
+
+## Stage 6 — full-volume meridional cross-match (2026-11-10)
+
+The 61-case probe's all-ambiguous result was revisited with a different matching
+contract. The new research executable compares the first five legacy meridional
+modes against up to eight direct cylindrical `m=0` candidates using a rectangular
+one-to-one assignment and full-mesh radial/axial displacement overlap weighted
+by direct FEM diagonal row-sum mass weights. It explicitly verifies the common
+mesh-node ordering after mm-to-SI conversion. Azimuthal DOFs are excluded because
+they have no legacy meridional counterpart; the metric is a lumped-mass
+approximation, not a consistent-M inner product.
+
+Results: 61/61 geometries, 305/305 first-five matches, minimum overlap
+0.999999999999, maximum relative frequency difference `8.29e-13`. On the first
+ten geometries, 23-node and 31-node meshes each produced 50/50 matches, with
+minimum overlap at least `0.999999999999` and maximum frequency differences below
+`7.55e-13`.
+
+This suggests the earlier 8-by-8 boundary-trace assignment was allowing higher
+legacy modes to compete with the first five target modes, or otherwise suffering
+from boundary-trace ambiguity. The result is promising but not a promotion gate:
+consistent-mass comparison, near-degenerate rank-2 subspaces, broader refined-mesh
+coverage, and shortlist-recall analysis remain required. The production objective
+and optimizer path remain unchanged. See
+[`ROUND_SOLVER_FULL_VOLUME_CROSSMATCH_STAGE6.md`](ROUND_SOLVER_FULL_VOLUME_CROSSMATCH_STAGE6.md)
+for method, limitations, detailed results, and reproduction commands.

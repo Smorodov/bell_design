@@ -1,9 +1,0 @@
-q=0.99 shape_match=1 shape_min=0.380448 kalman_update=1 kalman_ambiguous=0 kalman_pair_similarity=0.999966 kalman_margin=0.499989 mass_shape_a=0.999989 mass_shape_b=0.999967
-q=0.98 shape_match=1 shape_min=0.997635 kalman_update=1 kalman_ambiguous=0 kalman_pair_similarity=0.999965 kalman_margin=0.499989 mass_shape_a=0.999988 mass_shape_b=0.999966
-q=0.97 shape_match=1 shape_min=0.435073 kalman_update=1 kalman_ambiguous=0 kalman_pair_similarity=0.999964 kalman_margin=0.499991 mass_shape_a=0.999988 mass_shape_b=0.999965
-q=0.96 shape_match=1 shape_min=0.52978 kalman_update=1 kalman_ambiguous=0 kalman_pair_similarity=0.999963 kalman_margin=0.499989 mass_shape_a=0.999988 mass_shape_b=0.999965
-cross_mesh_shape_match=0 cross_mesh update=1 ambiguous=0 pair_similarity=0.999909 margin=0.500088 freq_compatible=2 subspace_rejected=0 best_rejected_pair=0
-fourier_enriched_shape_match=1 fourier_enriched update=1 ambiguous=0 no_compatible=0 pair_similarity=0.99996 margin=0.500212 freq_compatible=2 subspace_rejected=0 best_rejected_pair=0
-summary shape_matches=4 kalman_updates=4 kalman_ambiguous=0 continuation_rate=1 min_shape_similarity=0.380448 min_pair_similarity=0.999963
-modal_tracker_fem_continuation: PASS
-elapsed_seconds=6.83 exit_status=0

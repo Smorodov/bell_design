@@ -16,7 +16,9 @@ int main() {
 
     if (!(eu.geometry_score > 40.0 && ru.geometry_score > 40.0)) return 1;
     if (zh.compatible_with_axisymmetric_model) return 2;
+    if (!BellOptimizer::Models::is_supported_tuning_model("russian_orthodox_sysoi_2000_experimental")) return 4;
+    if (BellOptimizer::Models::is_supported_tuning_model("unsupported_orthodox_guess")) return 5;
     if (!std::isfinite(eu.geometry_score) || !std::isfinite(ru.geometry_score)) return 3;
-    std::cout << "PASS: tradition assessment is finite and flags Chinese non-axisymmetric limitation.\n";
+    std::cout << "PASS: tradition assessment and experimental Russian Orthodox tuning-model registration.\n";
     return 0;
 }

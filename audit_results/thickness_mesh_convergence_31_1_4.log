@@ -1,9 +1,0 @@
-profile_nodes=31, thickness_layers=1, nodes=62, elements=30, f1=437.3530281 Hz
-profile_nodes=31, thickness_layers=2, nodes=93, elements=60, f1=429.3801618 Hz
-profile_nodes=31, thickness_layers=3, nodes=124, elements=90, f1=427.6236115 Hz
-profile_nodes=31, thickness_layers=4, nodes=155, elements=120, f1=426.9823373 Hz
-Max adjacent frequency change, modes 1-10: 3.208109941%
-Min adjacent absolute shape correlation: 0.988198595
-Max adjacent normalized shape L2 error: 15.31781212%
-Results: "build_mesh_repeat/thickness_mesh_convergence_31_1_4.csv"
-elapsed_seconds=0.64 max_rss_kb=3284 exit_status=0

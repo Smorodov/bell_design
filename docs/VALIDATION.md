@@ -134,3 +134,12 @@ The module is detached and default-off. Structural solver contracts are numerica
 - `synthesis_sdk_link_contract` checks profile-loader and clapper-contact symbols through the standalone target.
 - The installed static archive was inspected for optimizer/FEM namespace symbols; none were found.
 - This verifies package/link isolation, not a full high-level runtime audio-render workflow.
+
+
+## 1.2.184 Stage 6 focused verification — 2026-11-10
+
+- Fresh CMake configure succeeded with GCC 14.2, Linux, Release, C++17, `BUILD_SMOKE_TESTS=ON`, `BUILD_CHINESE_RESEARCH=OFF`.
+- `bell_core`, `bell_synthesis`, and the new `round_solver_full_volume_probe` target built successfully. The `round_optimizer_integration_probe` target also built and ran successfully (`modes=26`, `max_abs_projection=0.0660095`, `modal_family_groups=15`).
+- Focused regression set passed 5/5: `cylindrical_modal_family_tracking`, `modal_subspace_similarity_contract`, `modal_subspace_conditioning_contract`, `clapper_modal_spectrum_family_audit`, and `modal_family_adapter_contract`.
+- Full configured all-target build was attempted twice but exceeded the available execution window while compiling remaining CLI/test targets; no compiler diagnostic was emitted before termination. Therefore a complete all-target build is **not** claimed. Windows/MSYS2 UCRT64 was not tested in this run.
+- Stage 6 cross-solver research probe: 61/61 geometries passed at 15 nodes (305/305 first-five matches); first ten geometries passed at 23 and 31 nodes (50/50 each). These use diagonal row-sum mass weights and are not a consistent-mass or physical-acoustic validation.

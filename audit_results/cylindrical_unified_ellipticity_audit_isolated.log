@@ -1,5 +1,0 @@
-axis=mesh q=0.85 h01 medium_pair=62.3667,69.1604 fine_pair=60.5591,67.4355 mesh_change=0.0298484 split_change=0.04239
-axis=ellipticity medium h0123 q=0.90 pair=18.3467,19.0673 split=0.0392792 q=0.85 tracked_indices=0,1 freqs=18.7905,20.0227 split=0.0655776 growth=1.66953 continuation_similarity=0.999933
-axis=harmonics q=0.85 h01_pair=62.3667,69.1604 h012_indices=1,2 h0123_indices=0,1 sim01_to_012=1 sim01_to_0123=0.998276 sim012_to_0123=0.998521 rank_change_01_to_012=0.000103011 rank_change_012_to_0123=2.45405
-cylindrical_unified_ellipticity_audit: PASS
-elapsed_seconds=34.24 exit_status=0

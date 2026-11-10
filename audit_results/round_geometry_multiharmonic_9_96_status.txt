@@ -1,2 +1,0 @@
-Status: INCOMPLETE / NOT COUNTED.
-A nine-geometry batch was attempted with the direct vector FEM configured for harmonics {0,1,2,3} and 96 candidate modes. The execution window ended before any geometry result was flushed; the output CSV remained empty. Three selected geometries were then run individually and passed, with full-field overlap 1.0 and common-volume coverage 1.0. Do not treat the nine-geometry batch as a pass.

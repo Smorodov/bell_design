@@ -19,6 +19,12 @@ CLI
 
 The production optimizer and the direct cylindrical vector-FEM listening path are distinct. The latter must not be described as a 3-D FEM solution or as the optimizer's default solver.
 
+## Acoustic target-profile boundary
+
+Acoustic targets are input data to the optimizer, not separate optimizer implementations. The intended design is a generic list of frequency/amplitude target terms with explicit mode selectors, explicit reference selectors and weights. Cultural/profile IDs are descriptive metadata and must not select hard-coded objective equations. Geometry seed family is a search/geometry prior and belongs in the evolution configuration, independently of the acoustic target file.
+
+**Stage 10 target-profile implementation:** production scoring consumes variable-length frequency and amplitude target vectors with explicit sorted-index selectors and explicit reference modes. Legacy v1 profiles are translated into the same representation. Profile labels are metadata, not objective switches. Geometry seed family is read from `evolution.seed_family`, with legacy fallback and conflict rejection. Physical mode-family and degenerate-subspace selectors remain unsupported. See `docs/TARGET_PROFILE_ARCHITECTURE.md`.
+
 ## Module ownership
 
 - `src/core/` owns shared domain types, material presets, profile generation, optimizer and legacy modal tracking.

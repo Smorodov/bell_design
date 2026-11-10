@@ -1,4 +1,0 @@
-[ 92%] Built target bell_core
-[ 92%] Building CXX object CMakeFiles/circular_localized_strike_projection.dir/tests/circular_localized_strike_projection.cpp.o
-[100%] Linking CXX executable circular_localized_strike_projection
-[100%] Built target circular_localized_strike_projection

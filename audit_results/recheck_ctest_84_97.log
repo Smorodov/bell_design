@@ -1,4 +1,0 @@
-Recheck on recovered 1.2.184 source, GCC 14.2, Release, C++17
-Test #84 cylindrical_harmonic_family_continuation: PASS (16.78 s)
-Test #97 modal_tracker_fem_continuation: PASS (6.97 s)
-Observed in isolated ctest rerun; both are also present in the original audit's round FEM group where applicable.

@@ -402,6 +402,11 @@ if(BUILD_SMOKE_TESTS)
     add_executable(nonaxisymmetric_reference_mesh_contract tests/nonaxisymmetric_reference_mesh_contract.cpp)
     target_link_libraries(nonaxisymmetric_reference_mesh_contract PRIVATE bell_validation)
 
+    add_executable(target_profile_loader_contract tests/target_profile_loader_contract.cpp)
+    target_include_directories(target_profile_loader_contract PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src/core)
+    target_compile_definitions(target_profile_loader_contract PRIVATE BELL_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}")
+    add_test(NAME target_profile_loader_contract COMMAND target_profile_loader_contract)
+
     add_executable(bell_core_smoke tests/bell_core_smoke.cpp)
     target_link_libraries(bell_core_smoke PRIVATE bell_core)
     target_compile_definitions(bell_core_smoke PRIVATE BELL_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}")
@@ -586,6 +591,13 @@ endif()
 if(BUILD_SMOKE_TESTS)
     add_executable(round_geometry_multifidelity_probe research/round_bell_audit/round_geometry_multifidelity_probe.cpp)
     target_link_libraries(round_geometry_multifidelity_probe PRIVATE bell_core)
+endif()
+
+# Differential diagnostic: one-to-one full-field matching with lumped FEM mass weights.
+# This remains research-only and does not alter production optimizer behavior.
+if(BUILD_SMOKE_TESTS)
+    add_executable(round_solver_full_volume_probe research/round_bell_audit/round_solver_full_volume_probe.cpp)
+    target_link_libraries(round_solver_full_volume_probe PRIVATE bell_core)
 endif()
 
 if(BUILD_SMOKE_TESTS)

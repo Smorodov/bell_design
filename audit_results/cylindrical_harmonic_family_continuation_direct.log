@@ -1,5 +1,0 @@
-q=0.85
-h01_pair=62.3667,69.1604 split=0.108931
-h012_pair_indices=1,2 freqs=62.3602,69.1595 similarity=1 split=0.109031
-h0123_pair_indices=0,1 freqs=18.7905,20.0227 similarity=0.998276 chain_pair_indices=0,2 chain_012_to_0123=0.998521 split=0.0655776
-cylindrical_harmonic_family_continuation: PASS

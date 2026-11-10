@@ -1,9 +1,0 @@
-Recheck on recovered 1.2.184 source, GCC 14.2, Release, C++17
-93 clapper_modal_spectrum_family_audit: PASS (3.09 s)
-94 contact_directional_audio_smoke: PASS (2.25 s)
-95 internal_clapper_audio_smoke: PASS (3.13 s)
-96 modal_state_tracker_contract: PASS (0.00 s)
-97 modal_tracker_fem_continuation: PASS (7.97 s)
-98 cylindrical_modal_field_cross_mesh: PASS (0.36 s)
-99 cylindrical_modal_field_fem_matrix: PASS (2.95 s)
-Result: 7/7 PASS.

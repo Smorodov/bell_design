@@ -11,6 +11,7 @@
 #include <filesystem>
 
 #include "simple_json.hpp"
+#include "target_profile_loader.hpp"
 #include "models/bell_model_profile.hpp"
 #include "bell_material.h"
 
@@ -90,26 +91,12 @@ int command_optimize(int argc, char** argv) {
     // ============================================================
     TargetData targets;
     BellOptimizer::Models::BellModelSelection model_selection;
-    
     try {
-        const auto data = bell::json::parse_file(targets_file);
-        model_selection.tuning_model = bell::json::string(data, "tuning_model", "western_five_partial");
-        model_selection.family = bell::json::string(data, "tradition", "neutral");
-        targets.prime_freq_target = bell::json::number(data, "prime_freq_target", 432.0);
-        bell::json::number_array(data, "freq_ratios", targets.freq_ratios.data(), targets.freq_ratios.size());
-        bell::json::number_array(data, "amp_ratios", targets.amp_ratios.data(), targets.amp_ratios.size());
-        bell::json::number_array(data, "freq_weights", targets.freq_weights.data(), targets.freq_weights.size());
-        bell::json::number_array(data, "amp_weights", targets.amp_weights.data(), targets.amp_weights.size());
-        std::cout << "✅ Загружены цели из " << targets_file << "\n";
-        if (!BellOptimizer::Models::is_supported_tuning_model(model_selection.tuning_model)) {
-            std::cerr << "❌ Tuning model '" << model_selection.tuning_model
-                      << "' is not supported by the current axisymmetric modal model.\n";
-            std::cerr << "   Use western_five_partial, or wait for the non-axisymmetric dual-tone Chinese-bell model.\n";
-            return 2;
-        }
+        targets = bell::profiles::load(bell::json::parse_file(targets_file));
+        std::cout << "Loaded target profile '" << targets.profile_id << "' (" << targets.display_name << ") from " << targets_file << "\n";
     } catch (const std::exception& e) {
-        std::cerr << "❌ Ошибка чтения targets.json: " << e.what() << "\n";
-        std::cout << "   Используются значения по умолчанию\n";
+        std::cerr << "Target profile error: " << e.what() << "\n";
+        return 2;
     }
 
     // ============================================================
@@ -148,11 +135,27 @@ int command_optimize(int argc, char** argv) {
             std::cerr << "Invalid ellipticity search range; require 0.70 <= min < max <= 1.00\n";
             return 2;
         }
-        model_selection.family = bell::json::string(data, "tradition", bell::json::string(data, "seed_family", model_selection.family));
-        std::cout << "✅ Загружены параметры эволюции из " << evolution_file << "\n";
+        const auto* seed_family_value = data.find("seed_family");
+        const auto* evolution_tradition_value = data.find("tradition");
+        const std::string evolution_tradition = evolution_tradition_value
+            ? evolution_tradition_value->string("") : std::string{};
+        const std::string configured_seed_family = seed_family_value
+            ? seed_family_value->string("")
+            : (!evolution_tradition.empty() ? evolution_tradition
+               : (!targets.legacy_seed_family.empty() ? targets.legacy_seed_family : model_selection.family));
+        if (configured_seed_family.empty()) throw std::runtime_error("seed_family must not be empty");
+        if (!targets.legacy_seed_family.empty() &&
+            (seed_family_value || evolution_tradition_value) &&
+            targets.legacy_seed_family != configured_seed_family)
+            throw std::runtime_error("conflicting legacy targets.tradition and evolution geometry-family values");
+        if (seed_family_value && !evolution_tradition.empty() &&
+            seed_family_value->string("") != evolution_tradition)
+            throw std::runtime_error("conflicting evolution.seed_family and legacy evolution.tradition values");
+        model_selection.family = configured_seed_family;
+        std::cout << "Loaded evolution parameters from " << evolution_file << "\n";
     } catch (const std::exception& e) {
         std::cerr << "❌ Ошибка чтения evolution.json: " << e.what() << "\n";
-        std::cout << "   Используются значения по умолчанию\n";
+        return 2;
     }
 
     // ============================================================
@@ -167,12 +170,15 @@ int command_optimize(int argc, char** argv) {
               << " MPa, nu=" << std::setprecision(2) << material.nu
               << ", rho=" << std::scientific << std::setprecision(2) << material.rho
               << " t/mm^3\n" << std::defaultfloat;
-    std::cout << std::fixed << std::setprecision(1) << "  Target Prime: " << targets.prime_freq_target << " Hz\n";
-    std::cout << "  Target ratios (relative to Prime):\n";
-    std::cout << std::fixed << std::setprecision(2) << "    Hum     = " << targets.freq_ratios[0] << "  (" << std::setprecision(1) << targets.prime_freq_target * targets.freq_ratios[0] << " Hz)\n";
-    std::cout << std::fixed << std::setprecision(2) << "    Tertia  = " << targets.freq_ratios[1] << "  (" << std::setprecision(1) << targets.prime_freq_target * targets.freq_ratios[1] << " Hz)\n";
-    std::cout << std::fixed << std::setprecision(2) << "    Quinta  = " << targets.freq_ratios[2] << "  (" << std::setprecision(1) << targets.prime_freq_target * targets.freq_ratios[2] << " Hz)\n";
-    std::cout << std::fixed << std::setprecision(2) << "    Nominal = " << targets.freq_ratios[3] << "  (" << std::setprecision(1) << targets.prime_freq_target * targets.freq_ratios[3] << " Hz)\n";
+    std::cout << std::fixed << std::setprecision(1)
+              << "  Frequency anchor: sorted mode " << targets.frequency_reference_mode_index
+              << " -> " << targets.prime_freq_target << " Hz\n";
+    std::cout << "  Frequency targets: " << targets.frequency_targets.size()
+              << "; amplitude targets: " << targets.amplitude_targets.size() << "\n";
+    for (const auto& target : targets.frequency_targets) {
+        std::cout << "    mode[" << target.mode_index << "] / reference = " << target.ratio
+                  << " (weight " << target.weight << ")\n";
+    }
     std::cout << "  Population size: " << evo.population_size << "\n";
     std::cout << "  Generations: " << evo.generations << "\n";
     std::cout << "  Elite count: " << evo.num_elite << "\n";
@@ -184,7 +190,6 @@ int command_optimize(int argc, char** argv) {
               << (evo.use_direct_elliptical_fem ? "enabled" : "disabled (legacy morph fallback)") << "\n";
     std::cout << "  RNG: " << (evo.deterministic ? "deterministic" : "random") << ", seed=" << evo.seed << "\n";
     std::cout << "  Model family: " << model_selection.family << "\n";
-    std::cout << "  Tuning model: " << model_selection.tuning_model << "\n";
     std::cout << "============================================================\n\n";
 
     auto start = std::chrono::high_resolution_clock::now();

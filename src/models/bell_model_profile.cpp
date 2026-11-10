@@ -111,7 +111,8 @@ std::unique_ptr<GeometrySeedProvider> make_seed_provider(const std::string& fami
 
 bool is_supported_tuning_model(const std::string& tuning_model) {
     return tuning_model == "western_five_partial" ||
-           tuning_model == "western_five_partial_reference";
+           tuning_model == "western_five_partial_reference" ||
+           tuning_model == "russian_orthodox_sysoi_2000_experimental";
 }
 
 TraditionAssessment assess_tradition(const BellGeometry& g, const std::string& tradition) {

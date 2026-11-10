@@ -4,7 +4,7 @@
 
 This audit concerns the production Western `western_five_partial` optimization path. It does not authorize replacing that objective with the internal-clapper objective, nor does it promote the experimental Chinese-bell objective. The production objective remains unchanged in this release.
 
-## Current production score
+## Current production score (legacy fixed-slot target contract)
 
 `EvolutionaryOptimizer::computeError` combines three terms:
 
@@ -12,7 +12,7 @@ This audit concerns the production Western `western_five_partial` optimization p
 2. Four log-relative amplitude-ratio errors for indices `{1, 2, 3, 4}` relative to index `0` (Hum).
 3. A soft penalty for mouth-diameter/height ratio outside the configured admissible interval.
 
-The target frequency `prime_freq_target` is enforced by analytic geometric scaling after the modal solve. The scale factor is `f_prime_raw / f_prime_target`; all modal frequencies are divided by this factor and all geometry lengths are multiplied by it. Therefore the frequency-ratio terms are shape objectives, not independent absolute-frequency objectives.
+The target frequency `prime_freq_target` is enforced using sorted mode index `1` by analytic geometric scaling after the modal solve. The scale factor is `f_prime_raw / f_prime_target`; all modal frequencies are divided by this factor and all geometry lengths are multiplied by it. Therefore the frequency-ratio terms are shape objectives, not independent absolute-frequency objectives.
 
 ## Physical meaning of the amplitude term
 
@@ -77,3 +77,16 @@ The existing `western_five_partial` objective remains the reference baseline. A 
 - Verify the legacy `western_five_partial` score remains numerically unchanged when the clapper objective is selected as an alternative.
 
 These are numerical acceptance gates only. They do not establish physical accuracy without measured bell/clapper reference data.
+
+
+## Acoustic target configuration audit — Stage 8
+
+### Historical Stage 8 finding (superseded by Stage 10)
+
+The Stage 8 CLI loads target JSON into `TargetData`, whose four-element `std::array` members impose a fixed target count. The JSON loader copies into those arrays; it is not a generic variable-length profile loader. The production score still uses frequency indices `{0,2,3,4}` relative to reference index `1` and amplitude indices `{1,2,3,4}` relative to reference index `0`. The `tuning_model` allow-list and Orthodox-specific output branches are metadata/CLI/reporting coupling that must be removed from objective selection. The target loader currently also reads `tradition` from target JSON to select the geometry seed provider, although the desired architecture places `seed_family` in evolution/search configuration.
+
+The next target-profile implementation is specified in `docs/TARGET_PROFILE_ARCHITECTURE.md`. It must first preserve the legacy Western score numerically, then support variable-length target vectors and explicit reference/mode selectors. The initial selector capability may remain `sorted_index`; it must not claim validated mode-family identity. The generic target evaluator must be profile-name agnostic.
+
+## Stage 10 update — generic target evaluator
+
+The Stage 8 fixed-slot objective described above is now the legacy v1 compatibility mapping, not the only production representation. Stage 10 converts v1 profiles to variable-length target vectors and accepts v2 selector-based profiles. Production scoring now evaluates each configured frequency and amplitude target through one generic evaluator; absolute-frequency scaling uses the configured reference selector. The v2 implementation currently supports `sorted_index` only. The separate experimental `clapper_acoustic_objective` helper still has a fixed legacy target interface and is not part of production candidate scoring. See `TARGET_PROFILE_IMPLEMENTATION_STAGE10_2026-11-10.md` for verified scope and outstanding parity gates.

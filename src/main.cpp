@@ -22,7 +22,7 @@ void print_help() {
     std::cout
         << "BellOptimizer " << BELL_VERSION << "\n\n"
         << "Usage:\n"
-        << "  bell optimize [--solver=ccx|internal]\n"
+        << "  bell optimize [--solver=ccx|internal] [--workdir <dir>] [--evolution <file>] [--targets <file>]\n"
         << "  bell synth [file.dat]\n  bell synth-geometry [geometry.json] [--ellipticity q] [--output file.wav]\n  bell synth-contact [geometry.json] [--output file.wav] [--strike-azimuth-deg deg] [--listener-polar-deg deg] [--listener-azimuth-deg deg]\n  bell synth-clapper [geometry.json] [--output file.wav] [--tip-radius m] [--tip-length m] [--initial-angular-velocity rad/s]\n"
         << "  bell --help\n"
         << "  bell --version\n"
@@ -83,7 +83,9 @@ int main(int argc, char** argv) {
         return 0;
     }
 
-    if (!set_workdir(argc, argv)) {
+    // optimize owns --workdir parsing in command_optimize(). Applying it here as
+    // well would resolve relative paths twice (e.g. bells -> bells/bells).
+    if (command != "optimize" && !set_workdir(argc, argv)) {
         return 2;
     }
 

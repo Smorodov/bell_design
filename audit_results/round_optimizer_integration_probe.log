@@ -1,7 +1,0 @@
-round_optimizer_integration_probe: PASS
-modes=26
-strike_center_z_m=0.7
-meridional_sigma_m=0.012
-circumferential_sigma_m=0.008
-max_abs_projection=0.0660095
-csv=audit_results/round_optimizer_integration_probe.csv

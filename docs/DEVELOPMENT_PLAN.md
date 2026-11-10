@@ -6,6 +6,21 @@ The modal continuation audit and geometric stereo comparison are complete within
 
 
 
+## Next configuration milestone — generic acoustic target profiles
+
+The next configuration change is a target-profile refactor, not a new cultural/genre-specific optimizer. Stage 8 still has a fixed four-frequency/four-amplitude target representation and hard-coded sorted-mode mappings. The target design is specified in `TARGET_PROFILE_ARCHITECTURE.md`: variable-length target terms, explicit reference selectors, metadata-only profile identity, and geometry seed selection owned by `evolution*.json`.
+
+Implementation order:
+
+1. Capture a deterministic baseline for the current production Western profile and preserve its score/ranking.
+2. Introduce generic in-memory target vectors and a strict v2 JSON parser while retaining a v1 compatibility reader.
+3. Move `seed_family` ownership to evolution configuration; treat legacy target `tradition` only as a controlled migration fallback.
+4. Stage 10 implements generic variable-length v2 target vectors, v1 conversion, sorted-index selectors, explicit frequency/amplitude references, and decoupled `evolution.seed_family`. Remaining gates: baseline score/ranking parity, stronger parser path diagnostics, and degenerate-mode treatment.
+5. Add variable-count, reference-selector, malformed-config, profile-name-independence and geometry/acoustic-separation tests.
+6. Compare v1 and migrated v2 Western runs on identical candidates and settings before any default or production switch.
+
+The first selector implementation may support only sorted mode indices. It must report that limitation and must not claim physical modal-family identification. Degenerate circular mode groups require a separate validated selector/evaluator path.
+
 ### Round-bell clapper integration — 1.2.179
 
 Added `evaluateClapperModalStateFromCandidate(config, inner_profile_si, final_geometry_modes, result)`. This is the candidate-facing provider API: it accepts only precomputed modal modes and their matching SI inner-wall profile, so it cannot create a mesh or invoke FEM. The older `evaluateClapperModalStateForGeometry` remains a standalone diagnostic wrapper that owns its own FEM solve and must not be called from candidate evaluation. A dedicated contract test checks insufficient modes, invalid profile and output reset. The clapper objective now groups adjacent modes within a relative frequency gap of 5e-5, averages group frequency and combines pressure magnitudes by root-sum-square. Its contract test verifies invariance to a rotation of a degenerate two-mode basis. The full configured Release build reached 100%; the focused 11-test regression selection passed 11/11. The 97-test inventory was not run in full for 1.2.179.
@@ -166,3 +181,10 @@ for production candidates. Next gate: apply subspace evidence in the diagnostic
 cross-solver assignment, compare it with full-volume mass-weighted subspaces,
 and measure assignment stability and shortlist recall on a representative
 round-bell geometry set before considering any production integration.
+
+
+## Stage 6 update — round-bell cross-solver association (2026-11-10)
+
+A research-only full-volume meridional matching probe now assigns the first five legacy modes to distinct candidates among the first eight direct cylindrical `m=0` modes. The same-mesh 61-geometry run produced 305 matches with minimum diagonal-lumped-mass overlap 0.999999999999 and maximum relative frequency difference 8.29e-13. Ten-geometry checks at 23 and 31 nodes also passed with overlaps at or above 0.999999999999. This points to a limitation in the previous all-eight boundary-trace assignment rather than a demonstrated mismatch in the first five meridional modes.
+
+Do not promote this result yet: validate with the consistent FEM mass bilinear form, compare rank-2 subspaces for near-degenerate pairs, perform the boundary-trace square-vs-rectangular ablation, and expand refined-mesh coverage. `western_five_partial` remains the sole production objective; no optimizer candidate screening is enabled.

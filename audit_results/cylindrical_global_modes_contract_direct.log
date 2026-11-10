@@ -1,7 +1,0 @@
-ellipticity_q=0.95 first_pair_Hz=4570.52,4579.05 relative_split=0.00186658 residual=1.83443e-05
-ellipticity_q=0.85 first_pair_Hz=4466.28,4473.44 relative_split=0.00160283 residual=4.82031e-05
-ellipticity_q=0.7 first_pair_Hz=4267.15,4298.73 relative_split=0.00739921 residual=4.17456e-05
-cylindrical_global_modes_contract: 2x2/4x4 refinement, constrained sparse modes PASS
-coarse_Hz=4829.58,5695 fine_Hz=4597.41,5587.18 residuals=4.78642e-06,2.13556e-06
-circle_q100_Hz=4603.26,4603.35
-ellipse_q085_Hz=4466.33,4473.45 quadrature_errors_KM=2.56869e-15,1.2062e-15

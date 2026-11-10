@@ -191,19 +191,40 @@ struct GeometryValidationResult {
 // Current defaults remain the historical reference profile; Chinese-bell
 // canonical targets are documented separately and are not silently substituted.
 // ============================================================
+struct FrequencyTarget {
+    std::size_t mode_index = 0;
+    double ratio = 1.0;
+    double weight = 1.0;
+    std::string label;
+};
+
+struct AmplitudeTarget {
+    std::size_t mode_index = 0;
+    std::size_t reference_mode_index = 0;
+    double ratio = 1.0;
+    double weight = 1.0;
+    std::string label;
+};
+
 struct TargetData {
-    // Целевая частота Prime (второй моды)
-    double prime_freq_target = 440.0;
-    
-    // Целевые соотношения частот относительно Prime:
-    // [Hum/Prime, Tertia/Prime, Quinta/Prime, Nominal/Prime]
+    // Descriptive metadata only; it must never select a scoring formula.
+    std::string profile_id = "legacy_western_reference";
+    std::string display_name = "Legacy Western reference";
+    std::string tuning_model = "western_five_partial"; // legacy metadata
+    std::string legacy_seed_family; // v1 compatibility only
+
+    // Absolute-frequency anchor: the selected sorted mode is scaled to this Hz.
+    std::size_t frequency_reference_mode_index = 1;
+    double prime_freq_target = 440.0; // legacy field name, retained for compatibility
+
+    // Generic variable-length targets. Selectors currently resolve sorted mode indices.
+    std::vector<FrequencyTarget> frequency_targets;
+    std::vector<AmplitudeTarget> amplitude_targets;
+
+    // Legacy v1 fields retained for source compatibility; the CLI translates them
+    // into the generic vectors before constructing the optimizer.
     std::array<double, 4> freq_ratios = {0.5, 1.25, 1.5, 2.0};
-    
-    // Целевые соотношения амплитуд относительно Hum:
-    // [Prime/Hum, Tertia/Hum, Quinta/Hum, Nominal/Hum]
     std::array<double, 4> amp_ratios = {0.8, 0.6, 0.4, 0.2};
-    
-    // Веса ошибок для частотных и excitation-amplitude ratios.
     std::array<double, 4> freq_weights = {1.0, 1.0, 1.0, 1.0};
     std::array<double, 4> amp_weights = {1.0, 1.0, 1.0, 1.0};
 };

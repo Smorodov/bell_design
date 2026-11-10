@@ -202,3 +202,22 @@ Earlier releases introduced the internal sparse eigensolver, cylindrical Q4 vect
 - The first probe reports Spearman ranking correlation 0.30 and up to 43.16% difference among the first five frequency ranks. The result shows that raw frequency-rank mapping is not sufficient for multi-fidelity screening.
 - Added `docs/MULTIFIDELITY_CALIBRATION.md` with setup, observed metrics, limitations, and next calibration requirements.
 - No production optimizer behavior, objective, solver default, or Chinese/elliptical scope changed.
+
+
+## Documentation review — generic acoustic target profiles (2026-11-10)
+
+- Added the selector-based target-profile architecture and explicit legacy-v1 migration contract.
+- Corrected user/developer documentation to state that Stage 8 still has four fixed frequency/amplitude target slots and hard-coded sorted-mode mappings.
+- Clarified that acoustic target profiles and geometry seed families are conceptually independent, while Stage 8 retains a legacy `tradition`-to-seed coupling.
+- Clarified that `tuning_model` is currently allow-listed metadata and must not select a hard-coded objective in the generic architecture.
+- Preserved the Sysoi target as a single-exemplar experimental reference, not a universal Orthodox tuning law.
+- Added `docs/ROUND_BELL_TARGET_PROFILE_ARCHITECTURE_REVIEW_STAGE9_2026-11-10.md` with the source findings and next implementation gates.
+- No production source code, objective, default profile, or project version changed in this documentation-only review.
+
+## Stage 10 — generic target profiles (2026-11-10)
+
+- Implemented selector-based v2 target profile loading with variable-length frequency/amplitude targets and explicit reference modes.
+- Preserved legacy v1 files through conversion to the generic target representation.
+- Unified production candidate scoring and removed profile-name-dependent objective/reporting branches.
+- Moved geometry seed selection to `evolution.seed_family`, with legacy fallback and conflict detection.
+- Added v2 example and loader contract test. Full Western score/ranking parity, full CTest and Windows verification remain open gates.
