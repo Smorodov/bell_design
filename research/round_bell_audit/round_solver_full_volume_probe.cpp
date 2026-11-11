@@ -4,6 +4,7 @@
 #include "excitation/meridional_influence.hpp"
 #include "fem/cylindrical_bell_model.hpp"
 #include "fem/cylindrical_modal_evaluator.hpp"
+#include "fem/cylindrical_global_assembly.hpp"
 #include "fem/internal_modal_solver.hpp"
 
 #include <algorithm>
@@ -52,29 +53,30 @@ bool sameMeshOrdering(const BellMeshData& legacy, const BellMeshData& direct) {
     return true;
 }
 
-double fullVolumeLumpedMassOverlap(const ModalMode& legacy, const ModalMode& direct) {
+double consistentMassOverlap(const ModalMode& legacy, const ModalMode& direct,
+                             const detail::SparseMatrix& mass) {
     const std::size_t nodes = legacy.nodal_radial.size();
     if (nodes == 0 || legacy.nodal_axial.size() != nodes ||
-        direct.fem_displacement.size() != nodes * 3 ||
-        direct.fem_mass_lumped_weights.size() != nodes * 3 ||
+        direct.fem_displacement.size() != static_cast<std::size_t>(mass.n) ||
+        mass.n != static_cast<int>(nodes * 3u) ||
         direct.fem_harmonics != std::vector<int>{0}) return -1.0;
 
-    double dot = 0.0, legacy_norm2 = 0.0, direct_norm2 = 0.0;
+    std::vector<double> a(static_cast<std::size_t>(mass.n), 0.0);
     for (std::size_t node = 0; node < nodes; ++node) {
-        for (const std::size_t component : {std::size_t(0), std::size_t(2)}) {
-            const std::size_t dof = node * 3 + component;
-            const double a = component == 0 ? legacy.nodal_radial[node]
-                                             : legacy.nodal_axial[node];
-            const double b = direct.fem_displacement[dof];
-            const double weight = direct.fem_mass_lumped_weights[dof];
-            if (!(weight >= 0.0) || !std::isfinite(weight)) return -1.0;
-            dot += weight * a * b;
-            legacy_norm2 += weight * a * a;
-            direct_norm2 += weight * b * b;
-        }
+        a[node * 3u] = legacy.nodal_radial[node];
+        a[node * 3u + 2u] = legacy.nodal_axial[node];
     }
-    if (!(legacy_norm2 > 0.0) || !(direct_norm2 > 0.0)) return -1.0;
-    return std::abs(dot) / std::sqrt(legacy_norm2 * direct_norm2);
+    const auto ma = mass.multiply(a);
+    const auto mb = mass.multiply(direct.fem_displacement);
+    double cross = 0.0, norm_a = 0.0, norm_b = 0.0;
+    for (std::size_t i = 0; i < a.size(); ++i) {
+        cross += a[i] * mb[i];
+        norm_a += a[i] * ma[i];
+        norm_b += direct.fem_displacement[i] * mb[i];
+    }
+    if (!(norm_a > 0.0) || !(norm_b > 0.0) ||
+        !std::isfinite(cross) || !std::isfinite(norm_a) || !std::isfinite(norm_b)) return -1.0;
+    return std::min(1.0, std::abs(cross) / std::sqrt(norm_a * norm_b));
 }
 
 std::vector<int> maximumAssignment(const std::vector<std::vector<double>>& score) {
@@ -137,7 +139,8 @@ bool solveFast(const BellGeometry& geometry, const BellMaterial& material,
 }
 
 bool solveDirect(const BellGeometry& geometry, const BellMaterial& material,
-                 const BellMeshConfig& mesh, ModalData& result, BellMeshData& legacy_mesh) {
+                 const BellMeshConfig& mesh, ModalData& result, BellMeshData& legacy_mesh,
+                 detail::SparseMatrix& consistent_mass) {
     const auto model = FEM::make_cylindrical_bell_model(geometry, material, mesh);
     if (!sameMeshOrdering(legacy_mesh, model.mesh_si)) return false;
     Excitation::MeridionalInfluence influence;
@@ -148,6 +151,8 @@ bool solveDirect(const BellGeometry& geometry, const BellMaterial& material,
     config.max_iterations = 1600;
     config.tolerance = 1e-6;
     config.minimum_frequency_hz = 1.0;
+    const auto system = FEM::assemble_cylindrical_bell_system(model, config.harmonics, config.angular_samples);
+    consistent_mass = system.mass;
     return FEM::evaluate_cylindrical_bell_modes(
         model, influence.make(model.mesh_si), config, result) && result.modes.size() >= 5;
 }
@@ -166,7 +171,7 @@ int main(int argc, char** argv) {
 
         std::string line;
         std::getline(source, line);
-        csv << "geometry,fast_mode,direct_mode,fast_frequency_hz,direct_frequency_hz,frequency_relative_error,lumped_mass_full_volume_overlap\n";
+        csv << "geometry,fast_mode,direct_mode,fast_frequency_hz,direct_frequency_hz,frequency_relative_error,consistent_mass_full_volume_overlap\n";
         csv << std::setprecision(12);
 
         BellMaterial material;
@@ -184,8 +189,9 @@ int main(int argc, char** argv) {
             const BellGeometry geometry = parseGeometry(fields);
             ModalData fast, direct;
             BellMeshData legacy_mesh;
+            detail::SparseMatrix consistent_mass;
             if (!solveFast(geometry, material, mesh, fast, legacy_mesh) ||
-                !solveDirect(geometry, material, mesh, direct, legacy_mesh)) {
+                !solveDirect(geometry, material, mesh, direct, legacy_mesh, consistent_mass)) {
                 ++failures;
                 std::cerr << "SOLVE_OR_MESH_FAIL " << fields[1] << '\n';
                 continue;
@@ -196,7 +202,7 @@ int main(int argc, char** argv) {
             std::vector<std::vector<double>> score(fast_count, std::vector<double>(direct_count, -1.0));
             for (std::size_t i = 0; i < fast_count; ++i)
                 for (std::size_t j = 0; j < direct_count; ++j)
-                    score[i][j] = fullVolumeLumpedMassOverlap(fast.modes[i], direct.modes[j]);
+                    score[i][j] = consistentMassOverlap(fast.modes[i], direct.modes[j], consistent_mass);
             const auto assignment = maximumAssignment(score);
             if (assignment.size() != fast_count) {
                 ++failures;
@@ -223,10 +229,10 @@ int main(int argc, char** argv) {
         std::cout << std::setprecision(12)
                   << "accepted_geometries=" << geometries << " failures=" << failures << '\n'
                   << "matched_first_five_pairs=" << pairs << '\n'
-                  << "minimum_lumped_mass_full_volume_overlap=" << minimum_overlap << '\n'
+                  << "minimum_consistent_mass_full_volume_overlap=" << minimum_overlap << '\n'
                   << "maximum_matched_frequency_relative_error=" << maximum_frequency_error << '\n'
                   << "scope=m0_only; mesh_nodes=" << mesh.nNodes
-                  << "; first-five-to-eight one-to-one rank-1 full-field assignment; diagonal row-sum mass weights\n";
+                  << "; first-five-to-eight one-to-one rank-1 full-field assignment; full consistent FEM mass matrix\n";
         return geometries > 0 && failures == 0 && pairs == geometries * 5 ? 0 : 2;
     } catch (const std::exception& error) {
         std::cerr << "round_solver_full_volume_probe: FAIL: " << error.what() << '\n';

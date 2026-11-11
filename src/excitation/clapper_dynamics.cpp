@@ -144,7 +144,78 @@ void rk4(System const& sys, State& s, double h) {
     for (std::size_t i = 0; i < s.size(); ++i)
         s[i] += h * (k1[i] + 2.0 * k2[i] + 2.0 * k3[i] + k4[i]) / 6.0;
 }
-} // namespace
+ } // namespace
+
+bool makeScaledClapperDynamicsConfig(
+    double final_bell_height_m, double inner_top_z_m,
+    const ClapperScalingParams& p, const BellMaterial& bell_material,
+    ClapperDynamicsConfig& config, ClapperScalingResult* summary) {
+    config = {};
+    if (!(std::isfinite(final_bell_height_m) && final_bell_height_m > 0.0) ||
+        !std::isfinite(inner_top_z_m) ||
+        !(std::isfinite(p.reference_bell_height_m) && p.reference_bell_height_m > 0.0) ||
+        !(std::isfinite(p.reference_mass_kg) && p.reference_mass_kg > 0.0) ||
+        !(std::isfinite(p.reference_moment_of_inertia_kg_m2) && p.reference_moment_of_inertia_kg_m2 > 0.0) ||
+        !(std::isfinite(p.reference_com_length_m) && p.reference_com_length_m > 0.0) ||
+        !(std::isfinite(p.reference_tip_length_m) && p.reference_tip_length_m > 0.0) ||
+        !(std::isfinite(p.reference_tip_radius_m) && p.reference_tip_radius_m > 0.0) ||
+        !(std::isfinite(p.reference_pivot_below_top_m) && p.reference_pivot_below_top_m >= 0.0) ||
+        !std::isfinite(p.reference_initial_angular_velocity_rad_s) ||
+        !std::isfinite(p.initial_angle_rad) ||
+        !(std::isfinite(p.reference_integration_step_s) && p.reference_integration_step_s > 0.0) ||
+        !(std::isfinite(p.reference_maximum_duration_s) && p.reference_maximum_duration_s > 0.0) ||
+        !(std::isfinite(p.tip_young_modulus_pa) && p.tip_young_modulus_pa > 0.0) ||
+        !std::isfinite(p.tip_poisson) || p.tip_poisson <= -1.0 || p.tip_poisson >= 0.5 ||
+        !std::isfinite(p.strike_azimuth_rad) ||
+        !(std::isfinite(bell_material.E) && bell_material.E > 0.0) ||
+        !std::isfinite(bell_material.nu) || bell_material.nu <= -1.0 || bell_material.nu >= 0.5)
+        return false;
+
+    const double s = final_bell_height_m / p.reference_bell_height_m;
+    if (!(std::isfinite(s) && s >= 0.05 && s <= 4.0)) return false;
+    const double mass = p.reference_mass_kg * s * s * s;
+    const double com = p.reference_com_length_m * s;
+    const double inertia = p.reference_moment_of_inertia_kg_m2 * s * s * s * s * s;
+    const double tip_length = p.reference_tip_length_m * s;
+    const double tip_radius = p.reference_tip_radius_m * s;
+    const double bell_young_pa = bell_material.E * 1.0e6;
+    const double effective_modulus = 1.0 / (
+        (1.0 - p.tip_poisson * p.tip_poisson) / p.tip_young_modulus_pa +
+        (1.0 - bell_material.nu * bell_material.nu) / bell_young_pa);
+    const double hertz = (4.0 / 3.0) * effective_modulus * std::sqrt(tip_radius);
+    const double omega = p.reference_initial_angular_velocity_rad_s / std::sqrt(s);
+    // Preserve the dimensionless integration resolution under Froude scaling:
+    // characteristic impact time scales as sqrt(length), so dt must do the same.
+    const double step = p.reference_integration_step_s * std::sqrt(s);
+    const double duration = p.reference_maximum_duration_s * std::sqrt(s);
+    if (!(std::isfinite(mass) && mass > 0.0 && std::isfinite(inertia) && inertia > 0.0 &&
+          std::isfinite(hertz) && hertz > 0.0 && std::isfinite(step) && step > 0.0 &&
+          std::isfinite(duration) && duration > 0.0 && duration / step <= 2000000.0)) return false;
+
+    config.mass_kg = mass;
+    config.moment_of_inertia_kg_m2 = inertia;
+    config.centre_of_mass_length_m = com;
+    config.tip_length_m = tip_length;
+    config.tip_radius_m = tip_radius;
+    config.pivot_r_m = 0.0;
+    config.pivot_z_m = inner_top_z_m - p.reference_pivot_below_top_m * s;
+    config.initial_angle_rad = p.initial_angle_rad;
+    config.initial_angular_velocity_rad_s = omega;
+    config.hertz_stiffness_n_per_m_1_5 = hertz;
+    config.strike_azimuth_rad = p.strike_azimuth_rad;
+    config.integration_step_seconds = step;
+    config.maximum_duration_seconds = duration;
+    if (summary) {
+        summary->linear_scale = s;
+        summary->mass_kg = mass;
+        summary->moment_of_inertia_kg_m2 = inertia;
+        summary->centre_of_mass_length_m = com;
+        summary->tip_length_m = tip_length;
+        summary->tip_radius_m = tip_radius;
+        summary->hertz_stiffness_n_per_m_1_5 = hertz;
+    }
+    return true;
+}
 
 bool simulateInternalClapperContact(const ClapperDynamicsConfig& c,
                                     const std::vector<Point2D>& profile,
@@ -212,6 +283,22 @@ bool simulateInternalClapperContact(const ClapperDynamicsConfig& c,
                 result.modal_velocity_at_separation[k] = s[3 + 2 * k];
             }
             result.final_energy_joules = sys.energy(s);
+            result.modal_energy_at_separation_joules.resize(modes.size(), 0.0);
+            for (std::size_t k = 0; k < modes.size(); ++k) {
+                const std::size_t qi = 2 + 2 * k;
+                const double velocity = s[qi + 1];
+                const double displacement = s[qi];
+                const double omega = modes[k].omega;
+                const double modalEnergy = 0.5 * modes[k].modal_mass *
+                    (velocity * velocity + omega * omega * displacement * displacement);
+                result.modal_energy_at_separation_joules[k] = modalEnergy;
+                result.bell_modal_energy_joules += modalEnergy;
+            }
+            result.clapper_energy_at_separation_joules =
+                0.5 * c.moment_of_inertia_kg_m2 * s[1] * s[1] +
+                c.mass_kg * kGravity * c.centre_of_mass_length_m * (1.0 - std::cos(s[0]));
+            result.bell_energy_transfer_fraction = result.initial_energy_joules > 0.0
+                ? result.bell_modal_energy_joules / result.initial_energy_joules : 0.0;
             result.contact_duration_seconds = result.separation_time_seconds - result.first_contact_time_seconds;
             result.maximum_relative_energy_error = maxEnergyError;
             result.contact_occurred = true;

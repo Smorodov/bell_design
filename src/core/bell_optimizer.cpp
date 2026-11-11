@@ -13,8 +13,37 @@
 #include "../math/modal_coordinate_morphing.hpp"
 #include "../fem/cylindrical_modal_evaluator.hpp"
 #include "../fem/cylindrical_bell_model.hpp"
+#include "../excitation/clapper_modal_state_provider.hpp"
+#include "../excitation/clapper_acoustic_objective.hpp"
+#include "../acoustics/directional_radiation.hpp"
 #include "../excitation/localized_strike.hpp"
 #include "../../research/round_bell_audit/round_bell_candidate_analysis.hpp"
+
+namespace {
+constexpr double kClapperModalDegeneracyTolerance = 5.0e-5;
+
+std::vector<double> groupedModalFrequencies(const ModalData& data) {
+    std::vector<double> frequencies;
+    std::vector<std::size_t> counts;
+    for (const auto& mode : data.modes) {
+        if (!frequencies.empty()) {
+            const double previous = frequencies.back();
+            const double relative_gap = std::abs(mode.frequency_hz - previous) /
+                std::max(mode.frequency_hz, previous);
+            if (relative_gap <= kClapperModalDegeneracyTolerance) {
+                const std::size_t count = counts.back();
+                frequencies.back() += (mode.frequency_hz - frequencies.back()) /
+                    static_cast<double>(count + 1);
+                counts.back() = count + 1;
+                continue;
+            }
+        }
+        frequencies.push_back(mode.frequency_hz);
+        counts.push_back(1);
+    }
+    return frequencies;
+}
+} // namespace
 
 // ============================================================
 // СТРУКТУРА ДЛЯ СОХРАНЕНИЯ РЕЗУЛЬТАТА
@@ -23,6 +52,9 @@ struct BestResult {
     double error = 0.0;
     BellGeometry geometry;
     ModalData modal_data;
+    bool group_degenerate_modes = false;
+    std::size_t frequency_reference_mode_index = 1;
+    std::string objective_model = "frequency_profile";
     
     bool save(const std::string& filename) const {
         std::ofstream file(filename);
@@ -30,13 +62,30 @@ struct BestResult {
 
         file << "{\n";
         file << "    \"error\": " << error << ",\n";
+        file << "    \"objective_model\": \"" << objective_model << "\",\n";
+        std::vector<double> frequencies;
+        if (group_degenerate_modes) frequencies = groupedModalFrequencies(modal_data);
+        else for (const auto& mode : modal_data.modes) frequencies.push_back(mode.frequency_hz);
+        file << "    \"frequency_reference_mode_index\": " << frequency_reference_mode_index << ",\n";
         file << "    \"frequencies\": {\n";
-        if (modal_data.modes.size() > 0) file << "        \"hum\": " << modal_data.modes[0].frequency_hz << ",\n";
-        if (modal_data.modes.size() > 1) file << "        \"prime\": " << modal_data.modes[1].frequency_hz << ",\n";
-        if (modal_data.modes.size() > 2) file << "        \"tertia\": " << modal_data.modes[2].frequency_hz << ",\n";
-        if (modal_data.modes.size() > 3) file << "        \"quinta\": " << modal_data.modes[3].frequency_hz << ",\n";
-        if (modal_data.modes.size() > 4) file << "        \"nominal\": " << modal_data.modes[4].frequency_hz << "\n";
+        if (frequencies.size() > 0) file << "        \"hum\": " << frequencies[0] << ",\n";
+        if (frequencies.size() > 1) file << "        \"prime\": " << frequencies[1] << ",\n";
+        if (frequencies.size() > 2) file << "        \"tertia\": " << frequencies[2] << ",\n";
+        if (frequencies.size() > 3) file << "        \"quinta\": " << frequencies[3] << ",\n";
+        if (frequencies.size() > 4) file << "        \"nominal\": " << frequencies[4] << "\n";
         file << "    },\n";
+        if (modal_data.clapper_objective_evaluated) {
+            file << "    \"clapper\": {\n";
+            file << "        \"strike_height_fraction\": " << modal_data.clapper_strike_height_fraction << ",\n";
+            file << "        \"mass_kg\": " << modal_data.clapper_mass_kg << ",\n";
+            file << "        \"moment_of_inertia_kg_m2\": " << modal_data.clapper_moment_of_inertia_kg_m2 << ",\n";
+            file << "        \"com_length_m\": " << modal_data.clapper_com_length_m << ",\n";
+            file << "        \"tip_length_m\": " << modal_data.clapper_tip_length_m << ",\n";
+            file << "        \"tip_radius_m\": " << modal_data.clapper_tip_radius_m << ",\n";
+            file << "        \"hertz_stiffness_n_per_m_1_5\": " << modal_data.clapper_hertz_stiffness_n_per_m_1_5 << ",\n";
+            file << "        \"initial_angular_velocity_rad_s\": " << modal_data.clapper_initial_angular_velocity_rad_s << "\n";
+            file << "    },\n";
+        }
         file << "    \"geometry\": {\n";
         file << "        \"H\": " << geometry.H << ",\n";
         file << "        \"R_mouth\": " << geometry.R_mouth << ",\n";
@@ -272,7 +321,11 @@ bool EvolutionaryOptimizer::loadBestFromFile(const std::string& filename) {
     // 6. СОХРАНЯЕМ ПЕРЕСЧИТАННЫЕ ДАННЫЕ
     // ============================================================
     setInitialGuess(scaled_geometry);
-    best_error_ = computeError(scaled_data, scaled_geometry);
+    if (evo_params_.objective_model == "clapper_acoustic") {
+        best_error_ = evaluateCandidate(scaled_geometry, scaled_data);
+    } else {
+        best_error_ = computeError(scaled_data, scaled_geometry);
+    }
     best_geometry_ = scaled_geometry;
     best_modal_data_ = scaled_data;
     modal_reference_ = scaled_data;
@@ -334,6 +387,9 @@ void EvolutionaryOptimizer::saveBestResult() {
     result.error = best_error_;
     result.geometry = best_geometry_;
     result.modal_data = best_modal_data_;
+    result.group_degenerate_modes = evo_params_.objective_model == "clapper_acoustic";
+    result.frequency_reference_mode_index = targets_.frequency_reference_mode_index;
+    result.objective_model = evo_params_.objective_model;
     
     std::cout << "      💾 Writing to best_geometry.json...\n";
     if (result.save("best_geometry.json")) {
@@ -510,16 +566,9 @@ double EvolutionaryOptimizer::computeError(const ModalData& modal_data, const Be
         return BellConstants::ERROR_INVALID;
     const double reference_freq = modes[reference].frequency_hz;
 
-    std::vector<FrequencyTarget> frequency_targets = targets_.frequency_targets;
-    std::vector<AmplitudeTarget> amplitude_targets = targets_.amplitude_targets;
-    if (frequency_targets.empty() && amplitude_targets.empty()) {
-        const std::size_t fi[] = {0, 2, 3, 4};
-        const std::size_t ai[] = {1, 2, 3, 4};
-        for (std::size_t i = 0; i < 4; ++i) {
-            frequency_targets.push_back({fi[i], targets_.freq_ratios[i], targets_.freq_weights[i], {}});
-            amplitude_targets.push_back({ai[i], 0, targets_.amp_ratios[i], targets_.amp_weights[i], {}});
-        }
-    }
+    const auto& frequency_targets = targets_.frequency_targets;
+    const auto& amplitude_targets = targets_.amplitude_targets;
+    if (frequency_targets.empty() && amplitude_targets.empty()) return BellConstants::ERROR_INVALID;
     double freq_error = 0.0;
     for (const auto& target : frequency_targets) {
         if (target.weight == 0.0) continue;
@@ -564,6 +613,7 @@ double EvolutionaryOptimizer::computeError(const ModalData& modal_data, const Be
 // ============================================================
 double EvolutionaryOptimizer::evaluateCandidate(BellGeometry& geometry, ModalData& out_data) {
     geometry = canonicalizeShape(geometry);
+    if (evo_params_.objective_model == "clapper_acoustic") geometry.ellipticity = 1.0;
     BellMeshConfig config;
     config.nNodes = 15;
     
@@ -578,6 +628,115 @@ double EvolutionaryOptimizer::evaluateCandidate(BellGeometry& geometry, ModalDat
         return 1e9;
     }
     
+    if (evo_params_.objective_model == "clapper_acoustic") {
+        try {
+            BellMeshConfig fem_mesh;
+            // This is the inner optimization loop, so use a deliberately coarse
+            // but complete circular modal basis. Final verification/rendering uses
+            // the higher-resolution settings outside the evolutionary loop.
+            fem_mesh.nNodes = 11;
+            FEM::CylindricalModalEvaluationConfig fem_config;
+            fem_config.harmonics = {0, 1, 2};
+            fem_config.angular_samples = 48;
+            fem_config.requested_modes = 14;
+            fem_config.max_iterations = 700;
+            fem_config.tolerance = 1.0e-6;
+            fem_config.minimum_frequency_hz = BellConstants::MIN_FREQ_HZ;
+
+            auto solve_round_modes = [&](const BellGeometry& candidate, ModalData& modes,
+                                         FEM::CylindricalBellModel& model) -> bool {
+                model = FEM::make_cylindrical_bell_model(candidate, material_, fem_mesh);
+                ModalInfluence neutral;
+                neutral.radial.assign(model.mesh_si.nodes.size(), 0.0);
+                neutral.axial.assign(model.mesh_si.nodes.size(), 0.0);
+                return FEM::evaluate_cylindrical_bell_modes(model, neutral, fem_config, modes);
+            };
+
+            // First obtain the frequency anchor on the canonical shape, grouping
+            // numerically degenerate circular-bell pairs exactly as the objective does.
+            ModalData anchor_modes;
+            FEM::CylindricalBellModel anchor_model;
+            if (!solve_round_modes(geometry, anchor_modes, anchor_model)) { std::cerr << "[clapper-objective] anchor FEM solve failed\n"; return BellConstants::ERROR_INVALID; }
+            const std::vector<double> grouped_frequencies = groupedModalFrequencies(anchor_modes);
+            if (targets_.frequency_reference_mode_index >= grouped_frequencies.size()) {
+                std::cerr << "[clapper-objective] frequency reference exceeds grouped mode count\n";
+                return BellConstants::ERROR_INVALID;
+            }
+            const double anchor_frequency = grouped_frequencies[targets_.frequency_reference_mode_index];
+            const double physical_scale = anchor_frequency / targets_.prime_freq_target;
+            if (!std::isfinite(physical_scale) || physical_scale < 0.05 || physical_scale > 20.0)
+                return BellConstants::ERROR_INVALID;
+            geometry.scale(physical_scale);
+
+            const double top_ratio = geometry.t_top / geometry.H;
+            const double bottom_ratio = geometry.t_bottom / geometry.H;
+            const double diameter_ratio = 2.0 * geometry.R_mouth / geometry.H;
+            if (top_ratio < 0.005 || top_ratio > 0.050 || bottom_ratio < 0.010 || bottom_ratio > 0.100 ||
+                diameter_ratio < 0.7 || diameter_ratio > 1.3) return BellConstants::ERROR_INVALID;
+
+            // The contact model must use FEM modes and the inner profile from this
+            // final, physically scaled geometry. No pre-scale boundary data is reused.
+            ModalData final_modes;
+            FEM::CylindricalBellModel final_model;
+            if (!solve_round_modes(geometry, final_modes, final_model)) { std::cerr << "[clapper-objective] final-geometry FEM solve failed\n"; return BellConstants::ERROR_INVALID; }
+            if (final_model.mesh_si.inner_profile.size() < 2 || final_model.mesh_si.outer_profile.size() < 2)
+                return BellConstants::ERROR_INVALID;
+
+            std::vector<Point2D> outer_profile_mm = final_model.mesh_si.outer_profile;
+            for (auto& point : outer_profile_mm) { point.r *= 1000.0; point.z *= 1000.0; }
+            for (auto& mode : final_modes.modes) {
+                const auto field = Acoustics::buildDirectionalRadiationField(
+                    mode, outer_profile_mm, evo_params_.clapper.listener_polar_rad, 1.0);
+                mode.acoustic_pressure_coefficient = std::abs(
+                    field.evaluate(evo_params_.clapper.listener_azimuth_rad));
+            }
+
+            Excitation::ClapperModalEvaluationConfig clapper_eval;
+            clapper_eval.top_z_m = final_model.mesh_si.inner_profile.front().z;
+            clapper_eval.mouth_z_m = final_model.mesh_si.inner_profile.back().z;
+            // The present reference suspension is demonstrative rather than
+            // calibrated. Accept a broad physically plausible strike band while
+            // recording the actual fraction in the result diagnostics.
+            clapper_eval.admissible_strike_fraction_min = 0.35;
+            clapper_eval.admissible_strike_fraction_max = 0.70;
+            if (!Excitation::makeScaledClapperDynamicsConfig(
+                    geometry.H * 1.0e-3, clapper_eval.top_z_m, evo_params_.clapper,
+                    material_, clapper_eval.clapper)) { std::cerr << "[clapper-objective] clapper scaling failed\n"; return BellConstants::ERROR_INVALID; }
+            Excitation::ClapperModalEvaluationResult excitation;
+            if (!Excitation::evaluateClapperModalStateFromCandidate(
+                    clapper_eval, final_model.mesh_si.inner_profile, final_modes.modes, excitation)) {
+                std::cerr << "[clapper-objective] clapper contact/evaluation failed (contact="
+                          << excitation.contact.contact_occurred << ", strike_fraction="
+                          << excitation.strike_height_fraction << ")\n";
+                return BellConstants::ERROR_INVALID;
+            }
+            final_modes.clapper_objective_evaluated = true;
+            final_modes.clapper_strike_height_fraction = excitation.strike_height_fraction;
+            final_modes.clapper_mass_kg = clapper_eval.clapper.mass_kg;
+            final_modes.clapper_moment_of_inertia_kg_m2 = clapper_eval.clapper.moment_of_inertia_kg_m2;
+            final_modes.clapper_com_length_m = clapper_eval.clapper.centre_of_mass_length_m;
+            final_modes.clapper_tip_length_m = clapper_eval.clapper.tip_length_m;
+            final_modes.clapper_tip_radius_m = clapper_eval.clapper.tip_radius_m;
+            final_modes.clapper_hertz_stiffness_n_per_m_1_5 = clapper_eval.clapper.hertz_stiffness_n_per_m_1_5;
+            final_modes.clapper_initial_angular_velocity_rad_s = clapper_eval.clapper.initial_angular_velocity_rad_s;
+
+            Excitation::ClapperModalState state;
+            state.modal_data = final_modes;
+            state.inner_profile_si = final_model.mesh_si.inner_profile;
+            state.excitation = std::move(excitation);
+            Excitation::ClapperAcousticObjectiveResult acoustic_score;
+            if (!Excitation::evaluateClapperAcousticObjective(state, targets_, acoustic_score)) {
+                std::cerr << "[clapper-objective] acoustic target evaluation failed\n";
+                return BellConstants::ERROR_INVALID;
+            }
+            out_data = std::move(final_modes);
+            return acoustic_score.total_error;
+        } catch (const std::exception& error) {
+            std::cerr << "[clapper-objective] exception: " << error.what() << "\n";
+            return BellConstants::ERROR_INVALID;
+        }
+    }
+
     if (!generator.buildMesh()) {
         return 1e9;
     }
@@ -766,8 +925,9 @@ double EvolutionaryOptimizer::evaluateCandidate(BellGeometry& geometry, ModalDat
     }
     
     // ============================================================
-    // ЭТАП 8: ВЫЧИСЛЯЕМ ОШИБКУ
+    // ЭТАП 8: SELECT THE FINAL-GEOMETRY OBJECTIVE
     // ============================================================
+    if (evo_params_.objective_model != "frequency_profile") return BellConstants::ERROR_INVALID;
     return computeError(out_data, geometry);
 }
 
@@ -819,32 +979,157 @@ std::vector<EvolutionaryOptimizer::Candidate> EvolutionaryOptimizer::initializeP
     return population;
 }
 
+// Accurate second stage for circular bells. It deliberately uses only the
+// axisymmetric (m=0) cylindrical FEM family, which is the family audited against
+// the fast meridional solver in Stage 13. Non-axisymmetric families are not
+// mixed into the frequency-index objective.
+double EvolutionaryOptimizer::evaluateRoundCandidateAccurate(
+    BellGeometry& geometry, ModalData& out_data) {
+    if (evo_params_.objective_model != "frequency_profile" ||
+        std::abs(geometry.ellipticity - 1.0) > 1.0e-12)
+        return BellConstants::ERROR_INVALID;
+
+    try {
+        geometry = canonicalizeShape(geometry);
+        BellMeshConfig mesh;
+        mesh.nNodes = 15;
+        const auto model = FEM::make_cylindrical_bell_model(geometry, material_, mesh);
+        FEM::CylindricalModalEvaluationConfig config;
+        config.harmonics = {0};
+        config.angular_samples = 48;
+        config.requested_modes = 18;
+        config.max_iterations = 1200;
+        config.tolerance = 1.0e-6;
+        config.minimum_frequency_hz = BellConstants::MIN_FREQ_HZ;
+        Excitation::MeridionalInfluence fem_influence;
+        const auto influence = fem_influence.make(model.mesh_si);
+        ModalData modes;
+        const std::size_t reference = targets_.frequency_reference_mode_index;
+        double scale = 0.0;
+        bool covers_synthesis_band = false;
+        while (true) {
+            if (!FEM::evaluate_cylindrical_bell_modes(model, influence, config, modes) || modes.modes.empty())
+                return BellConstants::ERROR_INVALID;
+            modes.sort_by_frequency();
+            if (reference >= modes.modes.size()) return BellConstants::ERROR_INVALID;
+            const double prime = modes.modes[reference].frequency_hz;
+            if (!std::isfinite(prime) || prime < BellConstants::MIN_FREQ_HZ)
+                return BellConstants::ERROR_INVALID;
+            scale = prime / targets_.prime_freq_target;
+            if (!std::isfinite(scale) || scale < 0.05 || scale > 20.0)
+                return BellConstants::ERROR_INVALID;
+            const double physical_top = modes.modes.back().frequency_hz / scale;
+            covers_synthesis_band = physical_top >= evo_params_.round_synthesis_max_frequency_hz;
+            if (covers_synthesis_band || config.requested_modes >= evo_params_.round_synthesis_max_modes ||
+                modes.modes.size() < static_cast<std::size_t>(config.requested_modes))
+                break;
+            config.requested_modes = std::min(evo_params_.round_synthesis_max_modes,
+                                               config.requested_modes + 8);
+        }
+        if (!covers_synthesis_band) {
+            std::cout << "[round-modal-band] requested mode cap reached; physical spectrum covered to "
+                      << modes.modes.back().frequency_hz / scale << " Hz of "
+                      << evo_params_.round_synthesis_max_frequency_hz << " Hz\n";
+        }
+        geometry.scale(scale);
+        for (auto& mode : modes.modes) mode.frequency_hz /= scale;
+        const double top = geometry.t_top / geometry.H;
+        const double bottom = geometry.t_bottom / geometry.H;
+        const double diameter = 2.0 * geometry.R_mouth / geometry.H;
+        if (top < 0.005 || top > 0.050 || bottom < 0.010 || bottom > 0.100 ||
+            diameter < 0.7 || diameter > 1.3) return BellConstants::ERROR_INVALID;
+        const double score = computeError(modes, geometry);
+        if (!std::isfinite(score) || score >= 1.0e8) return BellConstants::ERROR_INVALID;
+        out_data = std::move(modes);
+        return score;
+    } catch (const std::exception& error) {
+        std::cerr << "[round-two-stage] accurate FEM refinement failed: "
+                  << error.what() << "\n";
+        return BellConstants::ERROR_INVALID;
+    }
+}
+
 // ============================================================
-// ОЦЕНКА ПОПУЛЯЦИИ
+// ОЦЕНКА ПОПУЛЯЦИИ: FAST PASS, THEN SELECTIVE FEM REFINEMENT
 // ============================================================
 void EvolutionaryOptimizer::evaluatePopulation(std::vector<Candidate>& population) {
-    for (auto& cand : population) {
-        if (cand.valid) continue;
-        
+    const bool two_stage = evo_params_.enable_round_two_stage_optimization &&
+        evo_params_.objective_model == "frequency_profile";
+    std::vector<std::size_t> evaluated;
+    std::vector<BellGeometry> original_geometry(population.size());
+
+    for (std::size_t i = 0; i < population.size(); ++i) {
+        auto& cand = population[i];
+        // A loaded/best candidate may carry a valid score from another target or
+        // an earlier fidelity. Re-evaluate it in this run so it cannot bypass FEM.
+        if (!two_stage && cand.valid) continue;
+        original_geometry[i] = cand.geometry;
+        cand.accurate_evaluated = false;
         ModalData modal_data;
-        double error = evaluateCandidate(cand.geometry, modal_data);
-        
-        cand.error = error;
-        cand.modal_data = modal_data;
-        cand.valid = true;
+        cand.error = evaluateCandidate(cand.geometry, modal_data);
+        cand.modal_data = std::move(modal_data);
+        cand.valid = std::isfinite(cand.error) && cand.error < 1.0e8;
+        evaluated.push_back(i);
     }
+
+    if (!two_stage || evo_params_.round_two_stage_shortlist_size <= 0 || evaluated.empty())
+        return;
+
+    std::vector<std::size_t> ranked;
+    ranked.reserve(evaluated.size());
+    for (const auto i : evaluated) {
+        if (population[i].valid &&
+            std::abs(original_geometry[i].ellipticity - 1.0) <= 1.0e-12)
+            ranked.push_back(i);
+    }
+    std::stable_sort(ranked.begin(), ranked.end(), [&](std::size_t a, std::size_t b) {
+        if (population[a].error != population[b].error)
+            return population[a].error < population[b].error;
+        return a < b;
+    });
+
+    // At least num_elite candidates must be offered to the accurate stage;
+    // otherwise the next generation could have too few accurate parents.
+    const std::size_t requested = static_cast<std::size_t>(std::max(
+        evo_params_.round_two_stage_shortlist_size, evo_params_.num_elite));
+    const std::size_t count = std::min(requested, ranked.size());
+    std::size_t refined = 0;
+    for (std::size_t n = 0; n < count; ++n) {
+        const std::size_t i = ranked[n];
+        BellGeometry refined_geometry = original_geometry[i];
+        ModalData refined_modes;
+        const double refined_error = evaluateRoundCandidateAccurate(refined_geometry, refined_modes);
+        if (std::isfinite(refined_error) && refined_error < 1.0e8) {
+            population[i].geometry = std::move(refined_geometry);
+            population[i].modal_data = std::move(refined_modes);
+            population[i].error = refined_error;
+            population[i].accurate_evaluated = true;
+            ++refined;
+        }
+    }
+    std::cout << "[round-two-stage] fast candidates=" << evaluated.size()
+              << ", FEM shortlist=" << count << ", refined=" << refined
+              << "; elite selection uses one fidelity only\n";
 }
 
 // ============================================================
 // ОТБОР
 // ============================================================
 std::vector<EvolutionaryOptimizer::Candidate> EvolutionaryOptimizer::selectElite(const std::vector<Candidate>& population) {
-    std::vector<Candidate> sorted = population;
-    std::sort(sorted.begin(), sorted.end(), 
-              [](const Candidate& a, const Candidate& b) {
-                  return a.error < b.error;
-              });
-    
+    std::vector<Candidate> sorted;
+    const bool prefer_accurate = evo_params_.enable_round_two_stage_optimization &&
+        evo_params_.objective_model == "frequency_profile" &&
+        std::any_of(population.begin(), population.end(),
+            [](const Candidate& candidate) { return candidate.accurate_evaluated; });
+    for (const auto& candidate : population) {
+        if (!candidate.valid || !std::isfinite(candidate.error) || candidate.error >= 1.0e8)
+            continue;
+        if (!prefer_accurate || candidate.accurate_evaluated)
+            sorted.push_back(candidate);
+    }
+    std::stable_sort(sorted.begin(), sorted.end(),
+        [](const Candidate& a, const Candidate& b) { return a.error < b.error; });
+
     int num_elite = std::min(evo_params_.num_elite, (int)sorted.size());
     std::vector<Candidate> elite(sorted.begin(), sorted.begin() + num_elite);
     
@@ -958,13 +1243,16 @@ void EvolutionaryOptimizer::mutate(BellGeometry& geom) {
 // ЗАПУСК ОПТИМИЗАЦИИ
 // ============================================================
 void EvolutionaryOptimizer::run() {
-    std::cout << "\n============================================================\n  EVOLUTIONARY OPTIMIZER (Orthodox Bell Tuning)  \n";
+    std::cout << "\n============================================================\n  EVOLUTIONARY OPTIMIZER (Generic target-profile objective)  \n";
     std::cout << "============================================================\n";
     std::cout << std::fixed << std::setprecision(1) << "  Target Prime: " << targets_.prime_freq_target << " Hz\n";
     std::cout << "  Population: " << evo_params_.population_size << "\n";
     std::cout << "  Generations: " << evo_params_.generations << "\n";
     std::cout << std::fixed << std::setprecision(0) << "  Mutation: " << evo_params_.mutation_probability * 100 << "%\n";
-    std::cout << "  Mode: one run per candidate via pluggable modal solver (analytical scaling)\n";
+    if (evo_params_.objective_model == "clapper_acoustic")
+        std::cout << "  Mode: final-geometry cylindrical FEM + scaled clapper contact + acoustic profile score\n";
+    else
+        std::cout << "  Mode: one axisymmetric modal solve per candidate + analytical frequency scaling\n";
     std::cout << "  Ellipticity search: " << (evo_params_.optimize_ellipticity ? "enabled" : "frozen at q=1") << "\n";
     std::cout << "============================================================\n\n";
     
@@ -974,6 +1262,12 @@ void EvolutionaryOptimizer::run() {
     evaluatePopulation(population);
     
     auto elite = selectElite(population);
+    if (elite.empty()) {
+        std::cout << "No valid candidates survived evaluation; optimization stopped safely.\n";
+        best_geometry_ = getDefaultGeometry();
+        best_error_ = BellConstants::ERROR_INVALID;
+        return;
+    }
     
     if (!elite.empty() && elite.front().error < 1e8) {
         best_error_ = elite.front().error;
@@ -1039,7 +1333,7 @@ void EvolutionaryOptimizer::run() {
     std::cout << "============================================================\n";
     std::cout << std::fixed << std::setprecision(6) << "  Best error: " << best_error_ << "\n";
     std::cout << std::fixed << std::setprecision(1) << "  Time: " << duration / 1000.0 << " s\n";
-    std::cout << "  Modal solver runs: " << evo_params_.population_size * (evo_params_.generations + 1) << "\n";
+    std::cout << "  Candidate objective: " << evo_params_.objective_model << "\n";
     std::cout << "============================================================\n";
     
     printFinal(elite.front());
@@ -1054,7 +1348,7 @@ void EvolutionaryOptimizer::printHeader() {
               << " " << std::setw(10) << "H" << " " << std::setw(10) << "Rm"
               << " " << std::setw(10) << "t_top" << " " << std::setw(10) << "t_bot"
               << " " << std::setw(12) << "Mode0"
-              << " " << std::setw(12) << "Reference" << "\n";
+              << " " << std::setw(12) << (evo_params_.objective_model == "clapper_acoustic" ? "RefGroup" : "Reference") << "\n";
     std::cout << std::string(100, '-') << "\n";
 }
 
@@ -1064,9 +1358,15 @@ void EvolutionaryOptimizer::printGeneration(int gen, const Candidate& best) {
         return;
     }
     const auto& modes = best.modal_data.modes;
-    const double mode0 = modes.empty() ? 0.0 : modes[0].frequency_hz;
-    const double reference = targets_.frequency_reference_mode_index < modes.size()
+    double mode0 = modes.empty() ? 0.0 : modes[0].frequency_hz;
+    double reference = targets_.frequency_reference_mode_index < modes.size()
         ? modes[targets_.frequency_reference_mode_index].frequency_hz : 0.0;
+    if (evo_params_.objective_model == "clapper_acoustic") {
+        const auto groups = groupedModalFrequencies(best.modal_data);
+        mode0 = groups.empty() ? 0.0 : groups.front();
+        reference = targets_.frequency_reference_mode_index < groups.size()
+            ? groups[targets_.frequency_reference_mode_index] : 0.0;
+    }
     std::cout << std::right << std::setw(4) << gen
               << std::setw(12) << std::fixed << std::setprecision(4) << best.error
               << std::setw(10) << std::setprecision(1) << best.geometry.H
@@ -1082,27 +1382,47 @@ void EvolutionaryOptimizer::printFinal(const Candidate& best) {
         std::cout << "\n  No valid solution found.\n";
         return;
     }
-    
+
     std::cout << "\n  Best geometry:\n";
     std::cout << std::fixed << std::setprecision(1) << "    H         = " << best.geometry.H << " mm\n";
     std::cout << std::fixed << std::setprecision(1) << "    R_mouth   = " << best.geometry.R_mouth << " mm\n";
     std::cout << std::fixed << std::setprecision(1) << "    t_top     = " << best.geometry.t_top << " mm\n";
     std::cout << std::fixed << std::setprecision(1) << "    t_bottom  = " << best.geometry.t_bottom << " mm\n";
     std::cout << "    Radii     = ";
-    for (double r : best.geometry.r_knots) {
-        std::cout << std::fixed << std::setprecision(3) << r << " ";
-    }
+    for (double r : best.geometry.r_knots) std::cout << std::fixed << std::setprecision(3) << r << " ";
     std::cout << "\n";
-    
+
     if (!best.modal_data.modes.empty()) {
-        std::cout << "\n  Sorted modal frequencies:\n";
-        const std::size_t count = std::min<std::size_t>(5, best.modal_data.modes.size());
+        std::vector<double> displayed_frequencies;
+        if (best.modal_data.clapper_objective_evaluated) {
+            displayed_frequencies = groupedModalFrequencies(best.modal_data);
+            std::cout << "\n  Degeneracy-grouped modal frequencies (objective selector slots):\n";
+        } else {
+            for (const auto& mode : best.modal_data.modes)
+                displayed_frequencies.push_back(mode.frequency_hz);
+            std::cout << "\n  Sorted modal frequencies:\n";
+        }
+        const std::size_t count = std::min<std::size_t>(5, displayed_frequencies.size());
         for (std::size_t i = 0; i < count; ++i) {
             std::cout << std::fixed << std::setprecision(2) << "    mode[" << i << "]: "
-                      << best.modal_data.modes[i].frequency_hz << " Hz";
+                      << displayed_frequencies[i] << " Hz";
             if (i == targets_.frequency_reference_mode_index)
                 std::cout << " (frequency reference)";
             std::cout << "\n";
         }
+    }
+
+    if (best.modal_data.clapper_objective_evaluated) {
+        const auto& m = best.modal_data;
+        std::cout << "\n  Geometrically scaled clapper (reference design, not calibrated):\n"
+                  << std::fixed << std::setprecision(4)
+                  << "    strike fraction = " << m.clapper_strike_height_fraction << "\n"
+                  << "    mass            = " << m.clapper_mass_kg << " kg\n"
+                  << "    COM length      = " << m.clapper_com_length_m << " m\n"
+                  << "    tip length      = " << m.clapper_tip_length_m << " m\n"
+                  << "    tip radius      = " << m.clapper_tip_radius_m << " m\n"
+                  << "    inertia         = " << m.clapper_moment_of_inertia_kg_m2 << " kg m^2\n"
+                  << "    Hertz stiffness = " << m.clapper_hertz_stiffness_n_per_m_1_5 << " N/m^1.5\n"
+                  << "    initial omega   = " << m.clapper_initial_angular_velocity_rad_s << " rad/s\n";
     }
 }

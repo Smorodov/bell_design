@@ -7,6 +7,7 @@
     "loss_factor": 0.0005,
     "tail_factor": 1.2,
     "target_peak": 0.95,
+    "max_frequency": 20000.0,
     
     "envelope_threshold": 0.00001,
     "use_tail_trimming": true,

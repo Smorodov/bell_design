@@ -51,6 +51,16 @@ int main() {
         require(result.modal_displacement_at_separation.size() == modes.size() &&
                 result.modal_velocity_at_separation.size() == modes.size(),
                 "modal release state has the wrong size");
+        require(result.modal_energy_at_separation_joules.size() == modes.size(),
+                "per-mode energy accounting has the wrong size");
+        require(result.bell_modal_energy_joules > 0.0 &&
+                result.bell_energy_transfer_fraction > 0.0 &&
+                result.bell_energy_transfer_fraction < 1.0,
+                "bell modal energy transfer fraction is not physically bounded");
+        require(std::abs(result.final_energy_joules -
+                         (result.clapper_energy_at_separation_joules + result.bell_modal_energy_joules)) /
+                    result.initial_energy_joules < 2.0e-4,
+                "separation energy components do not close to total energy");
         std::cout << "clapper_dynamics_contract: PASS\n";
         return 0;
     } catch (const std::exception& e) {

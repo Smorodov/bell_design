@@ -59,36 +59,10 @@ inline void validate_targets(const TargetData& targets) {
 
 inline TargetData load(const Value& root) {
     if (!root.is_object()) throw std::runtime_error("target profile root must be an object");
+    const auto& version = required(root, "schema_version");
+    const double v = finite_number(version, "schema_version");
+    if (v != 2.0) throw std::runtime_error("unsupported target profile schema_version (expected 2; legacy profiles are not supported)");
     TargetData out;
-    const Value* version = root.find("schema_version");
-    if (!version) {
-        out.profile_id = bell::json::string(root, "tuning_model", "legacy_v1");
-        out.display_name = out.profile_id;
-        out.tuning_model = out.profile_id;
-        out.legacy_seed_family = bell::json::string(root, "tradition", "");
-        for (const char* key : {"freq_ratios", "freq_weights", "amp_ratios", "amp_weights"}) {
-            if (const auto* array = root.find(key)) {
-                if (array->type() != Value::Type::Array || array->array().size() != 4)
-                    throw std::runtime_error(std::string("legacy field '") + key + "' must contain exactly four values");
-                for (const auto& item : array->array()) (void)finite_number(item, key);
-            }
-        }
-        out.prime_freq_target = bell::json::number(root, "prime_freq_target", 440.0);
-        bell::json::number_array(root, "freq_ratios", out.freq_ratios.data(), out.freq_ratios.size());
-        bell::json::number_array(root, "amp_ratios", out.amp_ratios.data(), out.amp_ratios.size());
-        bell::json::number_array(root, "freq_weights", out.freq_weights.data(), out.freq_weights.size());
-        bell::json::number_array(root, "amp_weights", out.amp_weights.data(), out.amp_weights.size());
-        const std::size_t fi[] = {0, 2, 3, 4};
-        const std::size_t ai[] = {1, 2, 3, 4};
-        for (std::size_t i = 0; i < 4; ++i) {
-            out.frequency_targets.push_back({fi[i], out.freq_ratios[i], out.freq_weights[i], "legacy_frequency_" + std::to_string(i)});
-            out.amplitude_targets.push_back({ai[i], 0, out.amp_ratios[i], out.amp_weights[i], "legacy_amplitude_" + std::to_string(i)});
-        }
-        validate_targets(out);
-        return out;
-    }
-    const double v = finite_number(*version, "schema_version");
-    if (v != 2.0) throw std::runtime_error("unsupported target profile schema_version (expected 2)");
     out.profile_id = bell::json::string(root, "profile_id", "");
     out.display_name = bell::json::string(root, "display_name", out.profile_id);
     if (out.profile_id.empty()) throw std::runtime_error("profile_id must not be empty");

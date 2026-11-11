@@ -28,6 +28,8 @@ add_library(bell_core STATIC
     src/core/bell_material.cpp
     src/core/bell_optimizer.cpp
     src/core/modal_tracking.cpp
+    src/core/multifidelity_pipeline.cpp
+    src/core/physical_modal_selection.cpp
     research/round_bell_audit/modal_family_adapter.cpp
     research/round_bell_audit/round_bell_candidate_analysis.cpp
     src/models/bell_model_profile.cpp
@@ -407,6 +409,14 @@ if(BUILD_SMOKE_TESTS)
     target_compile_definitions(target_profile_loader_contract PRIVATE BELL_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}")
     add_test(NAME target_profile_loader_contract COMMAND target_profile_loader_contract)
 
+    add_executable(multifidelity_pipeline_contract tests/multifidelity_pipeline_contract.cpp)
+    target_link_libraries(multifidelity_pipeline_contract PRIVATE bell_core)
+    add_test(NAME multifidelity_pipeline_contract COMMAND multifidelity_pipeline_contract)
+
+    add_executable(physical_modal_selection_contract tests/physical_modal_selection_contract.cpp)
+    target_link_libraries(physical_modal_selection_contract PRIVATE bell_core)
+    add_test(NAME physical_modal_selection_contract COMMAND physical_modal_selection_contract)
+
     add_executable(bell_core_smoke tests/bell_core_smoke.cpp)
     target_link_libraries(bell_core_smoke PRIVATE bell_core)
     target_compile_definitions(bell_core_smoke PRIVATE BELL_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}")
@@ -520,7 +530,14 @@ if(BUILD_SMOKE_TESTS)
     add_test(NAME clapper_candidate_data_reuse_contract COMMAND clapper_candidate_data_reuse_contract)
     add_executable(clapper_acoustic_objective_contract tests/clapper_acoustic_objective_contract.cpp)
     target_link_libraries(clapper_acoustic_objective_contract PRIVATE bell_core)
+    add_executable(clapper_scaling_contract tests/clapper_scaling_contract.cpp)
+    target_link_libraries(clapper_scaling_contract PRIVATE bell_core)
     add_test(NAME clapper_acoustic_objective_contract COMMAND clapper_acoustic_objective_contract)
+    add_test(NAME clapper_scaling_contract COMMAND clapper_scaling_contract)
+
+    add_executable(clapper_scale_energy_audit tests/clapper_scale_energy_audit.cpp)
+    target_link_libraries(clapper_scale_energy_audit PRIVATE bell_core)
+    add_test(NAME clapper_scale_energy_audit COMMAND clapper_scale_energy_audit)
 
     add_executable(clapper_modal_spectrum_family_audit tests/clapper_modal_spectrum_family_audit.cpp)
     target_link_libraries(clapper_modal_spectrum_family_audit PRIVATE bell_core)
@@ -593,11 +610,18 @@ if(BUILD_SMOKE_TESTS)
     target_link_libraries(round_geometry_multifidelity_probe PRIVATE bell_core)
 endif()
 
-# Differential diagnostic: one-to-one full-field matching with lumped FEM mass weights.
+# Differential diagnostic: one-to-one full-field matching with the full consistent FEM mass matrix.
 # This remains research-only and does not alter production optimizer behavior.
 if(BUILD_SMOKE_TESTS)
     add_executable(round_solver_full_volume_probe research/round_bell_audit/round_solver_full_volume_probe.cpp)
     target_link_libraries(round_solver_full_volume_probe PRIVATE bell_core)
+endif()
+
+# Full consistent-mass rank-2 subspace audit on a circular bell.
+if(BUILD_SMOKE_TESTS)
+    add_executable(round_bell_consistent_mass_subspace_probe research/round_bell_audit/round_bell_consistent_mass_subspace_probe.cpp)
+    target_link_libraries(round_bell_consistent_mass_subspace_probe PRIVATE bell_core)
+    add_test(NAME round_bell_consistent_mass_subspace_probe COMMAND round_bell_consistent_mass_subspace_probe)
 endif()
 
 if(BUILD_SMOKE_TESTS)

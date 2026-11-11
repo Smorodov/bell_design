@@ -12,19 +12,11 @@ static void require(bool ok, const char* message) {
 
 int main() {
     try {
-        const auto legacy = bell::profiles::load(bell::json::Parser(R"({
-          "tuning_model":"arbitrary-descriptive-label", "prime_freq_target":440,
-          "freq_ratios":[0.5,1.25,1.5,2.0], "amp_ratios":[0.8,0.6,0.4,0.2],
-          "freq_weights":[1,2,3,4], "amp_weights":[0,0,0,0], "tradition":"neutral"
-        })").parse());
-        require(legacy.frequency_reference_mode_index == 1, "legacy reference index must remain 1");
-        require(legacy.frequency_targets.size() == 4, "legacy frequency target count");
-        require(legacy.amplitude_targets.size() == 4, "legacy amplitude target count");
-        require(legacy.frequency_targets[0].mode_index == 0 && legacy.frequency_targets[1].mode_index == 2,
-                "legacy frequency slot mapping changed");
-        require(legacy.amplitude_targets[0].mode_index == 1 && legacy.amplitude_targets[0].reference_mode_index == 0,
-                "legacy amplitude slot mapping changed");
-        require(legacy.frequency_targets[3].weight == 4.0, "legacy weights were not preserved");
+        bool rejected_legacy = false;
+        try {
+            (void)bell::profiles::load(bell::json::Parser(R"({"prime_freq_target":440,"freq_ratios":[0.5,1.25,1.5,2.0]})").parse());
+        } catch (const std::exception&) { rejected_legacy = true; }
+        require(rejected_legacy, "legacy profile format must not be accepted");
 
         const auto v2 = bell::profiles::load(bell::json::Parser(R"({
           "schema_version":2, "profile_id":"free_form_profile", "display_name":"Free form",

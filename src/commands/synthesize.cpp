@@ -8,6 +8,7 @@
 #include <fstream>
 #include "ccx/ccx_parser.hpp"
 #include "math_constants.hpp"
+#include "core/physical_modal_selection.hpp"
 #include "simple_json.hpp"
 
 
@@ -73,6 +74,7 @@ int command_synthesize(int argc, char* argv[]) {
             config.use_tail_trimming = bell::json::boolean(cfg, "use_tail_trimming", true);
             config.reverb_mix = bell::json::number(cfg, "reverb_mix", 0.0);
             config.reverb_feedback = bell::json::number(cfg, "reverb_feedback", 0.3);
+            config.max_frequency = bell::json::number(cfg, "max_frequency", 20000.0);
 
             std::cout << "✅ Загружена конфигурация из synthesis.json\n";
         } else {
@@ -91,6 +93,24 @@ int command_synthesize(int argc, char* argv[]) {
         prime_frequency = data.modes[0].frequency_hz;
     }
     config.target_fundamental = prime_frequency;
+
+    // Frequencies from the modal file are already absolute physical Hz.
+    // Select by the requested synthesis band, not by a fixed mode count.
+    PhysicalModalSelectionConfig selection_config;
+    selection_config.maximum_frequency_hz = config.max_frequency;
+    selection_config.sample_rate_hz = static_cast<double>(config.sample_rate);
+    selection_config.nyquist_margin = 0.98;
+    const auto selection = selectPhysicalSynthesisModes(data, selection_config);
+    data.modes = selection.selected_modes;
+    if (data.modes.empty() || prime_frequency > selection.effective_maximum_frequency_hz) {
+        std::cerr << "No usable modes remain in the physical synthesis band, or the prime frequency is above its ceiling.\n";
+        return 1;
+    }
+    std::cout << "   Physical modal band: 0-" << selection.effective_maximum_frequency_hz
+              << " Hz; kept " << selection.selected_count << "/" << selection.input_count
+              << " modes (outside band=" << selection.outside_frequency_band
+              << ", numerical rejects=" << selection.numerical_rejections
+              << ", weak retained=" << selection.weak_modes << ")\n";
 
     // ============================================================
     // ПОДГОТОВКА МОД

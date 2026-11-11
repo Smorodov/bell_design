@@ -1,0 +1,18 @@
+[
+  {
+    "scale": 0.2,
+    "geometry": "research/scale_audio_audit/cases/geometry_0.2.json"
+  },
+  {
+    "scale": 0.5,
+    "geometry": "research/scale_audio_audit/cases/geometry_0.5.json"
+  },
+  {
+    "scale": 1.0,
+    "geometry": "research/scale_audio_audit/cases/geometry_1.json"
+  },
+  {
+    "scale": 2.0,
+    "geometry": "research/scale_audio_audit/cases/geometry_2.json"
+  }
+]

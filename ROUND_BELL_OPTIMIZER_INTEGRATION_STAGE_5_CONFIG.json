@@ -1,4 +1,0 @@
-{
-  "enable_round_fem_diagnostics": true,
-  "round_fem_diagnostics_csv": "round_fem_diagnostics.csv"
-}

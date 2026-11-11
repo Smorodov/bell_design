@@ -1,7 +1,6 @@
 #include "clapper_acoustic_objective.hpp"
 
 #include <algorithm>
-#include <array>
 #include <cmath>
 #include <vector>
 
@@ -73,23 +72,20 @@ bool evaluateClapperAcousticObjective(
     ClapperAcousticObjectiveResult& result) {
     result = {};
     std::vector<ModalGroup> groups;
-    if (!build_modal_groups(state, groups) || groups.size() < 5 ||
-        !finitePositive(targets.prime_freq_target)) return false;
+    if (!build_modal_groups(state, groups) ||
+        targets.frequency_reference_mode_index >= groups.size() ||
+        !finitePositive(targets.prime_freq_target) ||
+        (targets.frequency_targets.empty() && targets.amplitude_targets.empty())) return false;
 
-    constexpr std::array<int, 4> frequency_indices{{0, 2, 3, 4}};
-    constexpr std::array<int, 4> amplitude_indices{{1, 2, 3, 4}};
-    const double prime = groups[1].frequency_hz;
-    const double hum_amplitude = groups[0].pressure_norm;
-    if (!finitePositive(prime) || !finitePositive(hum_amplitude)) return false;
-
-    for (std::size_t i = 0; i < 4; ++i) {
-        const double target_ratio = targets.freq_ratios[i];
-        const double weight = targets.freq_weights[i];
-        if (!finitePositive(target_ratio) || !std::isfinite(weight) || weight < 0.0)
-            return false;
-        const double ratio = groups[static_cast<std::size_t>(frequency_indices[i])].frequency_hz / prime;
-        const double error = std::log(ratio / target_ratio);
-        result.frequency_error += weight * error * error;
+    const double reference_frequency = groups[targets.frequency_reference_mode_index].frequency_hz;
+    if (!finitePositive(reference_frequency)) return false;
+    for (const auto& target : targets.frequency_targets) {
+        if (target.weight == 0.0) continue;
+        if (target.mode_index >= groups.size() || target.mode_index == targets.frequency_reference_mode_index ||
+            !finitePositive(target.ratio) || !std::isfinite(target.weight) || target.weight < 0.0) return false;
+        const double actual = groups[target.mode_index].frequency_hz / reference_frequency;
+        const double error = std::log(actual / target.ratio);
+        result.frequency_error += target.weight * error * error;
     }
 
     result.modal_amplitudes.resize(groups.size());
@@ -99,16 +95,17 @@ bool evaluateClapperAcousticObjective(
     for (std::size_t i = 0; i < groups.size(); ++i)
         result.modal_amplitudes[i] = groups[i].pressure_norm / max_amplitude;
 
-    for (std::size_t i = 0; i < 4; ++i) {
-        const double target_ratio = targets.amp_ratios[i];
-        const double weight = targets.amp_weights[i];
-        if (!finitePositive(target_ratio) || !std::isfinite(weight) || weight < 0.0)
-            return false;
-        const double ratio = groups[static_cast<std::size_t>(amplitude_indices[i])].pressure_norm /
-                             hum_amplitude;
-        if (!finitePositive(ratio)) return false;
-        const double error = std::log(ratio / target_ratio);
-        result.amplitude_error += weight * error * error;
+    for (const auto& target : targets.amplitude_targets) {
+        if (target.weight == 0.0) continue;
+        if (target.mode_index >= groups.size() || target.reference_mode_index >= groups.size() ||
+            target.mode_index == target.reference_mode_index || !finitePositive(target.ratio) ||
+            !std::isfinite(target.weight) || target.weight < 0.0) return false;
+        const double numerator = groups[target.mode_index].pressure_norm;
+        const double denominator = groups[target.reference_mode_index].pressure_norm;
+        if (!finitePositive(numerator) || !finitePositive(denominator)) return false;
+        const double actual = numerator / denominator;
+        const double error = std::log(actual / target.ratio);
+        result.amplitude_error += target.weight * error * error;
     }
 
     result.total_error = result.frequency_error + result.amplitude_error;

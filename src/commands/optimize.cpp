@@ -117,9 +117,42 @@ int command_optimize(int argc, char** argv) {
         evo.optimize_ellipticity = bell::json::boolean(data, "optimize_ellipticity", false);
         evo.use_direct_elliptical_fem = bell::json::boolean(data, "use_direct_elliptical_fem", false);
         evo.enable_round_fem_diagnostics = bell::json::boolean(data, "enable_round_fem_diagnostics", false);
+        evo.enable_round_two_stage_optimization = bell::json::boolean(data, "enable_round_two_stage_optimization", false);
+        evo.round_two_stage_shortlist_size = bell::json::integer(data, "round_two_stage_shortlist_size", 4);
+        evo.round_synthesis_max_frequency_hz = bell::json::number(data, "round_synthesis_max_frequency_hz", 20000.0);
+        evo.round_synthesis_max_modes = bell::json::integer(data, "round_synthesis_max_modes", 96);
+        if (evo.round_two_stage_shortlist_size < 1)
+            throw std::runtime_error("round_two_stage_shortlist_size must be positive");
+        if (!(evo.round_synthesis_max_frequency_hz > 0.0) || evo.round_synthesis_max_modes < 18 ||
+            evo.round_synthesis_max_modes > 256)
+            throw std::runtime_error("round synthesis band must be positive and round_synthesis_max_modes must be in [18, 256]");
         evo.round_fem_diagnostics_csv = bell::json::string(data, "round_fem_diagnostics_csv", "round_fem_diagnostics.csv");
         evo.ellipticity_min = bell::json::number(data, "ellipticity_min", 0.70);
         evo.ellipticity_max = bell::json::number(data, "ellipticity_max", 1.00);
+        evo.objective_model = bell::json::string(data, "objective_model", "frequency_profile");
+        if (evo.objective_model != "frequency_profile" && evo.objective_model != "clapper_acoustic")
+            throw std::runtime_error("objective_model must be 'frequency_profile' or 'clapper_acoustic'");
+        if (evo.objective_model == "clapper_acoustic" && evo.optimize_ellipticity)
+            throw std::runtime_error("clapper_acoustic currently supports round bells only; set optimize_ellipticity=false");
+        if (const auto* clapper = data.find("clapper")) {
+            if (!clapper->is_object()) throw std::runtime_error("clapper must be an object");
+            evo.clapper.reference_bell_height_m = bell::json::number(*clapper, "reference_bell_height_m", evo.clapper.reference_bell_height_m);
+            evo.clapper.reference_mass_kg = bell::json::number(*clapper, "reference_mass_kg", evo.clapper.reference_mass_kg);
+            evo.clapper.reference_moment_of_inertia_kg_m2 = bell::json::number(*clapper, "reference_moment_of_inertia_kg_m2", evo.clapper.reference_moment_of_inertia_kg_m2);
+            evo.clapper.reference_com_length_m = bell::json::number(*clapper, "reference_com_length_m", evo.clapper.reference_com_length_m);
+            evo.clapper.reference_tip_length_m = bell::json::number(*clapper, "reference_tip_length_m", evo.clapper.reference_tip_length_m);
+            evo.clapper.reference_tip_radius_m = bell::json::number(*clapper, "reference_tip_radius_m", evo.clapper.reference_tip_radius_m);
+            evo.clapper.reference_pivot_below_top_m = bell::json::number(*clapper, "reference_pivot_below_top_m", evo.clapper.reference_pivot_below_top_m);
+            evo.clapper.reference_initial_angular_velocity_rad_s = bell::json::number(*clapper, "reference_initial_angular_velocity_rad_s", evo.clapper.reference_initial_angular_velocity_rad_s);
+            evo.clapper.initial_angle_rad = bell::json::number(*clapper, "initial_angle_rad", evo.clapper.initial_angle_rad);
+            evo.clapper.reference_integration_step_s = bell::json::number(*clapper, "reference_integration_step_s", evo.clapper.reference_integration_step_s);
+            evo.clapper.reference_maximum_duration_s = bell::json::number(*clapper, "reference_maximum_duration_s", evo.clapper.reference_maximum_duration_s);
+            evo.clapper.tip_young_modulus_pa = bell::json::number(*clapper, "tip_young_modulus_pa", evo.clapper.tip_young_modulus_pa);
+            evo.clapper.tip_poisson = bell::json::number(*clapper, "tip_poisson", evo.clapper.tip_poisson);
+            evo.clapper.strike_azimuth_rad = bell::json::number(*clapper, "strike_azimuth_rad", evo.clapper.strike_azimuth_rad);
+            evo.clapper.listener_polar_rad = bell::json::number(*clapper, "listener_polar_rad", evo.clapper.listener_polar_rad);
+            evo.clapper.listener_azimuth_rad = bell::json::number(*clapper, "listener_azimuth_rad", evo.clapper.listener_azimuth_rad);
+        }
         material_id = bell::json::string(data, "material", material_id);
         const auto* material_preset = BellOptimizer::find_material_preset(material_id);
         if (!material_preset) {
@@ -136,21 +169,9 @@ int command_optimize(int argc, char** argv) {
             return 2;
         }
         const auto* seed_family_value = data.find("seed_family");
-        const auto* evolution_tradition_value = data.find("tradition");
-        const std::string evolution_tradition = evolution_tradition_value
-            ? evolution_tradition_value->string("") : std::string{};
         const std::string configured_seed_family = seed_family_value
-            ? seed_family_value->string("")
-            : (!evolution_tradition.empty() ? evolution_tradition
-               : (!targets.legacy_seed_family.empty() ? targets.legacy_seed_family : model_selection.family));
+            ? seed_family_value->string("") : model_selection.family;
         if (configured_seed_family.empty()) throw std::runtime_error("seed_family must not be empty");
-        if (!targets.legacy_seed_family.empty() &&
-            (seed_family_value || evolution_tradition_value) &&
-            targets.legacy_seed_family != configured_seed_family)
-            throw std::runtime_error("conflicting legacy targets.tradition and evolution geometry-family values");
-        if (seed_family_value && !evolution_tradition.empty() &&
-            seed_family_value->string("") != evolution_tradition)
-            throw std::runtime_error("conflicting evolution.seed_family and legacy evolution.tradition values");
         model_selection.family = configured_seed_family;
         std::cout << "Loaded evolution parameters from " << evolution_file << "\n";
     } catch (const std::exception& e) {
@@ -165,6 +186,10 @@ int command_optimize(int argc, char** argv) {
     std::cout << "  BELL OPTIMIZER - Bell Tuning  \n";
     std::cout << "============================================================\n\n";
     
+    std::cout << "  Objective model: " << evo.objective_model << "\n";
+    std::cout << "  Round two-stage optimization: "
+              << (evo.enable_round_two_stage_optimization ? "enabled" : "disabled")
+              << " (FEM shortlist=" << evo.round_two_stage_shortlist_size << ")\n";
     std::cout << "  Material preset: " << material_id << "\n";
     std::cout << std::fixed << std::setprecision(1) << "  Material: E=" << material.E
               << " MPa, nu=" << std::setprecision(2) << material.nu
@@ -189,6 +214,11 @@ int command_optimize(int argc, char** argv) {
     std::cout << "  Direct elliptical vector FEM: "
               << (evo.use_direct_elliptical_fem ? "enabled" : "disabled (legacy morph fallback)") << "\n";
     std::cout << "  RNG: " << (evo.deterministic ? "deterministic" : "random") << ", seed=" << evo.seed << "\n";
+    if (evo.objective_model == "clapper_acoustic") {
+        std::cout << "  Clapper scale: reference bell H=" << evo.clapper.reference_bell_height_m
+                  << " m, reference mass=" << evo.clapper.reference_mass_kg
+                  << " kg; mass scales with H^3, inertia with H^5\n";
+    }
     std::cout << "  Model family: " << model_selection.family << "\n";
     std::cout << "============================================================\n\n";
 

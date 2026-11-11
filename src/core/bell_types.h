@@ -4,7 +4,6 @@
 
 #include <vector>
 #include <string>
-#include <array>
 #include <cmath>
 #include <cstdint>
 
@@ -207,31 +206,44 @@ struct AmplitudeTarget {
 };
 
 struct TargetData {
-    // Descriptive metadata only; it must never select a scoring formula.
-    std::string profile_id = "legacy_western_reference";
-    std::string display_name = "Legacy Western reference";
-    std::string tuning_model = "western_five_partial"; // legacy metadata
-    std::string legacy_seed_family; // v1 compatibility only
+    // Descriptive metadata only; it never selects a scoring formula.
+    std::string profile_id;
+    std::string display_name;
 
-    // Absolute-frequency anchor: the selected sorted mode is scaled to this Hz.
+    // Absolute-frequency anchor: selected grouped/sorted mode is scaled to this Hz.
     std::size_t frequency_reference_mode_index = 1;
-    double prime_freq_target = 440.0; // legacy field name, retained for compatibility
+    double prime_freq_target = 440.0;
 
-    // Generic variable-length targets. Selectors currently resolve sorted mode indices.
+    // Generic variable-length targets. In clapper_acoustic mode selectors address
+    // degeneracy-grouped modal slots; in frequency mode they address sorted modes.
     std::vector<FrequencyTarget> frequency_targets;
     std::vector<AmplitudeTarget> amplitude_targets;
-
-    // Legacy v1 fields retained for source compatibility; the CLI translates them
-    // into the generic vectors before constructing the optimizer.
-    std::array<double, 4> freq_ratios = {0.5, 1.25, 1.5, 2.0};
-    std::array<double, 4> amp_ratios = {0.8, 0.6, 0.4, 0.2};
-    std::array<double, 4> freq_weights = {1.0, 1.0, 1.0, 1.0};
-    std::array<double, 4> amp_weights = {1.0, 1.0, 1.0, 1.0};
 };
 
 // ============================================================
 // ПАРАМЕТРЫ ЭВОЛЮЦИИ
 // ============================================================
+struct ClapperScalingParams {
+    // Dimensionally similar reference design. These are demonstrator values,
+    // not calibrated measurements; all dimensions derive from final bell height.
+    double reference_bell_height_m = 1.0;
+    double reference_mass_kg = 5.0;
+    double reference_moment_of_inertia_kg_m2 = 1.058;
+    double reference_com_length_m = 0.46;
+    double reference_tip_length_m = 0.52;
+    double reference_tip_radius_m = 0.035;
+    double reference_pivot_below_top_m = 0.07;
+    double reference_initial_angular_velocity_rad_s = 3.2;
+    double initial_angle_rad = 0.0;
+    double reference_integration_step_s = 2.0e-6;
+    double reference_maximum_duration_s = 0.25;
+    double tip_young_modulus_pa = 2.0e11;
+    double tip_poisson = 0.29;
+    double strike_azimuth_rad = 0.0;
+    double listener_polar_rad = 0.5235987755982988;
+    double listener_azimuth_rad = 0.0;
+};
+
 struct EvolutionParams {
     int population_size = 20;
     int generations = 10;
@@ -251,9 +263,21 @@ struct EvolutionParams {
     // Opt-in side-channel validation for circular candidates. Runs direct
     // cylindrical FEM + modal-family/strike analysis without affecting fitness.
     bool enable_round_fem_diagnostics = false;
+    // Experimental coarse-to-fine path for circular round bells. Stage 1 evaluates
+    // the full population with the internal solver; Stage 2 re-evaluates the
+    // best N candidates with the direct cylindrical FEM (m=0). Disabled by default.
+    bool enable_round_two_stage_optimization = false;
+    int round_two_stage_shortlist_size = 4;
+    // Absolute synthesis band coverage for the final physical-size m=0 spectrum.
+    double round_synthesis_max_frequency_hz = 20000.0;
+    int round_synthesis_max_modes = 96;
     std::string round_fem_diagnostics_csv = "round_fem_diagnostics.csv";
     double ellipticity_min = 0.70;
     double ellipticity_max = 1.00;
+    // "frequency_profile" preserves the established production objective.
+    // "clapper_acoustic" opts into final-geometry FEM + physical clapper scoring.
+    std::string objective_model = "frequency_profile";
+    ClapperScalingParams clapper;
 };
 
 #endif // BELL_TYPES_H

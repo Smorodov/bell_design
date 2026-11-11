@@ -38,6 +38,9 @@ public:
         double error = BellConstants::ERROR_INVALID;
         ModalData modal_data;
         bool valid = false;
+        // True only when the candidate score/modal data come from the accurate
+        // physical-geometry FEM pass in the current population evaluation.
+        bool accurate_evaluated = false;
     };
 
 private:
@@ -69,6 +72,7 @@ private:
     Candidate createNearCandidate(const BellGeometry& base, double error);
     
     double evaluateCandidate(BellGeometry& geometry, ModalData& out_data);
+    double evaluateRoundCandidateAccurate(BellGeometry& geometry, ModalData& out_data);
     double computeError(const ModalData& modal_data, const BellGeometry& geometry);
     
     std::vector<Candidate> initializePopulation();

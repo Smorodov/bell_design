@@ -5,6 +5,7 @@
 #include <chrono>
 #include <filesystem>
 #include <fstream>
+#include <cstring>
 #include <iostream>
 #include <limits>
 #include <stdexcept>
@@ -50,6 +51,8 @@ int main() {
         const auto base = std::filesystem::temp_directory_path() / "belloptimizer_wav_writer_contract";
         const auto monoPath = base.string() + "_mono.wav";
         const auto stereoPath = base.string() + "_stereo.wav";
+        const auto floatPath = base.string() + "_float.wav";
+        const auto floatStereoPath = base.string() + "_float_stereo.wav";
         const auto invalidPath = base.string() + "_invalid.wav";
         const std::vector<double> mono{-1.0, -0.5, 0.0, 0.5, 1.0, 1.5};
         require(BellOptimizer::Audio::writeMonoPcm16(monoPath, mono, 48000), "mono writer failed");
@@ -68,6 +71,22 @@ int main() {
         checkHeader(stereoBytes, 2, 3, 44100);
         require(u16(stereoBytes, 44) == 8192u && u16(stereoBytes, 46) == static_cast<std::uint16_t>(-24576),
                 "stereo interleaving/order incorrect");
+
+        const std::vector<double> raw{0.0, 1.75, -2.5};
+        require(BellOptimizer::Audio::writeMonoFloat32(floatPath, raw, 48000), "float32 mono writer failed");
+        const auto floatBytes = readAll(floatPath);
+        require(floatBytes.size() == 44u + raw.size() * 4u, "unexpected float32 WAV size");
+        require(u16(floatBytes, 20) == 3u && u16(floatBytes, 34) == 32u,
+                "float32 WAV format tag/bit depth incorrect");
+        std::uint32_t sampleBits = u32(floatBytes, 48);
+        float sampleValue = 0.0f;
+        std::memcpy(&sampleValue, &sampleBits, sizeof(sampleValue));
+        require(std::abs(sampleValue - 1.75f) < 1.0e-7f, "float32 writer clipped raw sample");
+        require(BellOptimizer::Audio::writeStereoFloat32(floatStereoPath, {1.5, -1.5}, {-2.0, 2.0}, 44100),
+                "float32 stereo writer failed");
+        const auto floatStereoBytes = readAll(floatStereoPath);
+        require(floatStereoBytes.size() == 44u + 16u && u16(floatStereoBytes, 22) == 2u &&
+                u16(floatStereoBytes, 20) == 3u, "float32 stereo WAV header incorrect");
 
         require(!BellOptimizer::Audio::writeMonoPcm16(invalidPath,
                 {0.0, std::numeric_limits<double>::quiet_NaN()}, 48000),
@@ -88,7 +107,9 @@ int main() {
 
         std::filesystem::remove(monoPath);
         std::filesystem::remove(stereoPath);
-        std::cout << "WAV writer PCM16 mono/stereo contract passed\n";
+        std::filesystem::remove(floatPath);
+        std::filesystem::remove(floatStereoPath);
+        std::cout << "WAV writer PCM16 and float32 mono/stereo contracts passed\n";
         return 0;
     } catch (const std::exception& error) {
         std::cerr << "WAV writer contract failed: " << error.what() << '\n';

@@ -1,5 +1,34 @@
 # Changelog
 
+## 1.2.184 — Stage 18 (2026-11-11)
+
+- Added adaptive absolute-frequency modal expansion to `synth-contact` and `synth-clapper`.
+- Modal requests grow from 24 by doubling up to `--modal-max-modes` (default 192; accepted range 24..512), stopping at `min(20 kHz, 0.49 × sample rate)` or the configured cap.
+- If a larger expansion solve fails, the last successful modal result is retained and the metadata reports incomplete coverage.
+- Synthesis metadata now records the adaptive solve count, final request and frequency-band coverage.
+- Updated the consolidated project guide and validation record.
+
+- Added a physical circular-bell rank-2 modal-subspace probe using harmonics `{0,1,2,3}` and the full consistent mass matrix. Ten near-degenerate pairs retained minimum principal overlap 0.999999963871 across sparse-ordering changes.
+- Demonstrated that individual vector assignment can be materially lower (minimum 0.761178) while the full pair subspace remains stable.
+- Added the Stage 13 research report and reproduction instructions. Production screening, objective formulas, target profiles and the optimizer loop remain unchanged.
+- Explicitly recorded the remaining coverage gap: the fast meridional solver does not represent non-axisymmetric `m>0` cosine/sine families.
+
+## Stage 12 — 2026-11-11
+- Prepared the two-stage round-bell optimization architecture independently of target-profile definitions.
+- Added a solver-independent candidate handoff selector with disabled-by-default screening and mandatory fallback for ambiguous, unmatched and failed fast evaluations.
+- Added `multifidelity_pipeline_contract` and Stage 12 integration/calibration documentation.
+- Production optimizer, objective formulas and target-profile schema remain unchanged; all-candidate accurate evaluation remains the default.
+
+## 1.2.184 — Stage 11 round-bell clapper objective integration (2026-11-10)
+
+- Wired `objective_model: "clapper_acoustic"` into circular-bell evolutionary candidate scoring as an explicit opt-in; `frequency_profile` remains the default.
+- The clapper path computes a grouped modal frequency anchor on the canonical shape, scales the geometry, recomputes direct cylindrical FEM on the final physical geometry, then simulates inner-wall pendulum/Hertz contact and scores the generic profile targets against near-degenerate modal groups.
+- Added dimensionally similar clapper scaling: lengths/tip radius `s`, mass `s^3`, inertia `s^5`, gravity-similar initial angular velocity `s^-1/2`; Hertz stiffness is recalculated from material properties and scaled tip radius.
+- Removed the target-profile v1 compatibility loader and legacy fixed target arrays. Migrated all bundled `bells/targets*.json` files to schema v2. Geometry seed family is owned only by `evolution.seed_family`.
+- Added clapper scaling and generic grouped-objective tests; focused 7-test clapper/profile selection passed 7/7.
+- A deterministic two-candidate CLI smoke run completed in about 3.2 s with one valid clapper-scored candidate. The selected 340.4 mm bell uses an approximately 0.197 kg reference-scaled clapper, not 5 kg; the exact mass, inertia, dimensions, Hertz stiffness and strike fraction are persisted in `best_geometry.json`.
+- Remaining gates: full all-target build/CTest, Windows/MSYS2, mesh/mode/time-step convergence, fixed-candidate ranking stability, physical modal-family identity and measured bell/clapper calibration. No default objective switch.
+
 ## 1.2.184 — modal subspace invariance audit
 
 - Expanded the principal-angle contract with two deterministic 30-case sweeps: arbitrary in-plane basis rotations/permutations/sign changes/scalings, and controlled out-of-plane principal-angle perturbations.
@@ -221,3 +250,12 @@ Earlier releases introduced the internal sparse eigensolver, cylindrical Q4 vect
 - Unified production candidate scoring and removed profile-name-dependent objective/reporting branches.
 - Moved geometry seed selection to `evolution.seed_family`, with legacy fallback and conflict detection.
 - Added v2 example and loader contract test. Full Western score/ranking parity, full CTest and Windows verification remain open gates.
+
+## 1.2.184 — Stage 19 (2026-11-11)
+
+- Added `--normalization peak|none` to `synth-contact` and `synth-clapper`; legacy peak-normalized PCM16 remains the default.
+- Added unclipped IEEE float32 mono/stereo WAV output for raw pressure-proxy comparisons.
+- Added raw acoustic RMS metadata alongside raw peak proxy and applied gain.
+- Added four-scale geometry preparation and WAV/metadata comparison utilities.
+- Added float32 WAV writer contract coverage and consolidated scale-audit documentation.
+- Four focused contracts passed; the full four-scale FEM audio sweep remains outstanding because the attempted run exceeded the available execution window.

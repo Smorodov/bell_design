@@ -17,17 +17,27 @@ static void append_mode(ClapperModalState& state, double frequency, double cosin
 
 int main() {
     TargetData targets;
+    targets.frequency_reference_mode_index = 1;
+    targets.prime_freq_target = 440.0;
+    targets.frequency_targets = {
+        {0, 0.5, 1.0, "hum"}, {2, 1.25, 1.0, "third"},
+        {3, 1.5, 1.0, "fifth"}, {4, 2.0, 1.0, "nominal"}
+    };
+    targets.amplitude_targets = {
+        {1, 0, 0.8, 1.0, "prime"}, {2, 0, 0.6, 1.0, "third"},
+        {3, 0, 0.4, 1.0, "fifth"}, {4, 0, 0.2, 1.0, "nominal"}
+    };
+
     ClapperModalState state;
     const double prime = targets.prime_freq_target;
-
-    // Hum is a degenerate two-mode subspace. Its combined pressure norm is 1,
-    // independent of the arbitrary orthonormal basis returned by the solver.
-    append_mode(state, prime * targets.freq_ratios[0] * (1.0 - 1.0e-5), 1.0 / std::sqrt(2.0), 0.0);
-    append_mode(state, prime * targets.freq_ratios[0] * (1.0 + 1.0e-5), 0.0, 1.0 / std::sqrt(2.0));
-    append_mode(state, prime, targets.amp_ratios[0], 0.0);
-    append_mode(state, prime * targets.freq_ratios[1], targets.amp_ratios[1], 0.0);
-    append_mode(state, prime * targets.freq_ratios[2], targets.amp_ratios[2], 0.0);
-    append_mode(state, prime * targets.freq_ratios[3], targets.amp_ratios[3], 0.0);
+    // The hum is a degenerate two-mode subspace. The evaluator combines its
+    // response by RSS before applying profile selectors.
+    append_mode(state, prime * 0.5 * (1.0 - 1.0e-5), 1.0 / std::sqrt(2.0), 0.0);
+    append_mode(state, prime * 0.5 * (1.0 + 1.0e-5), 0.0, 1.0 / std::sqrt(2.0));
+    append_mode(state, prime, 0.8, 0.0);
+    append_mode(state, prime * 1.25, 0.6, 0.0);
+    append_mode(state, prime * 1.5, 0.4, 0.0);
+    append_mode(state, prime * 2.0, 0.2, 0.0);
 
     ClapperAcousticObjectiveResult result;
     if (!evaluateClapperAcousticObjective(state, targets, result) ||
@@ -36,8 +46,7 @@ int main() {
         return 1;
     }
 
-    // Rotate the degenerate pair's modal response into a different basis.
-    // The sum-of-squares group norm, and therefore the score, must not change.
+    // Rotate response inside the degenerate pair; group RSS and score stay fixed.
     state.excitation.modal_pressure_cosine[0] = 1.0;
     state.excitation.modal_pressure_sine[0] = 0.0;
     state.excitation.modal_pressure_magnitude[0] = 1.0;
@@ -57,14 +66,22 @@ int main() {
         return 3;
     }
 
-    state.excitation.modal_pressure_magnitude[3] = 0.0;
-    state.excitation.modal_pressure_cosine[3] = 0.0;
-    state.excitation.modal_pressure_sine[3] = 0.0;
-    if (evaluateClapperAcousticObjective(state, targets, result)) {
-        std::cerr << "zero target-family response must be rejected\n";
+    // A profile with a different target count and a non-default frequency
+    // reference is evaluated by the same generic objective.
+    TargetData compact;
+    compact.frequency_reference_mode_index = 2;
+    compact.prime_freq_target = 550.0;
+    compact.frequency_targets = {{0, 0.4, 1.0, "low"}, {4, 1.6, 0.5, "high"}};
+    if (!evaluateClapperAcousticObjective(state, compact, result) || result.total_error > 1.0e-12) {
+        std::cerr << "variable target count/arbitrary reference must be supported\n";
         return 4;
     }
 
+    targets.frequency_targets.push_back({99, 3.0, 1.0, "out_of_range"});
+    if (evaluateClapperAcousticObjective(state, targets, result)) {
+        std::cerr << "out-of-range generic selector must be rejected\n";
+        return 5;
+    }
     std::cout << "clapper_acoustic_objective_contract: PASS\n";
     return 0;
 }

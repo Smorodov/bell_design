@@ -1,0 +1,19 @@
+{
+    "population_size": 50,
+    "generations": 50,
+    "num_elite": 10,
+    "mutation_probability": 0.1,
+    "mutation_strength": 0.05,
+    "num_knots": 9,
+    "seed_family": "neutral",
+    "deterministic": false,
+    "seed": 0,
+    "optimize_ellipticity": false,
+    "ellipticity_min": 0.7,
+    "ellipticity_max": 1.0,
+    "material": "bell_bronze_reference",
+    "enable_round_two_stage_optimization": true,
+    "round_two_stage_shortlist_size": 4,
+    "round_synthesis_max_frequency_hz": 20000,
+    "round_synthesis_max_modes": 96
+}

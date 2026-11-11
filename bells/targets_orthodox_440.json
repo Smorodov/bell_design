@@ -1,31 +1,108 @@
 {
-    "tuning_model": "russian_orthodox_sysoi_2000_experimental",
-    "tradition": "russian_orthodox",
-    "tuning_name": "russian_orthodox_sysoi_experimental_440Hz",
-    "prime_freq_target": 440.0,
-    "freq_ratios": [
-        0.51,
-        1.26,
-        1.64,
-        2.19
-    ],
-    "amp_ratios": [
-        0.8,
-        0.6,
-        0.4,
-        0.2
-    ],
-    "freq_weights": [
-        1.0,
-        1.0,
-        1.0,
-        1.0
-    ],
-    "amp_weights": [
-        0.0,
-        0.0,
-        0.0,
-        0.0
-    ],
-    "note": "Experimental frequency-ratio target based on the measured Sysoi bell at Rostov Uspensky Cathedral, Table 1 in Aldoshina & Nicanorov, AES 108th Convention preprint 5117 (2000): F1/F2=0.51, F3/F2=1.26, F4/F2=1.64, F5/F2=2.19. F2 is used as prime. This is one measured historical exemplar, not a universal Russian Orthodox tuning law. Amplitude terms are disabled because the published SPL values are strike/time/measurement dependent and are not a transferable modal-amplitude target."
+  "schema_version": 2,
+  "profile_id": "orthodox_440",
+  "display_name": "russian_orthodox_sysoi_experimental_440Hz",
+  "source": {
+    "kind": "historical_or_reference",
+    "description": "Experimental frequency-ratio target based on the measured Sysoi bell at Rostov Uspensky Cathedral, Table 1 in Aldoshina & Nicanorov, AES 108th Convention preprint 5117 (2000): F1/F2=0.51, F3/F2=1.26, F4/F2=1.64, F5/F2=2.19. F2 is used as prime. This is one measured historical exemplar, not a universal Russian Orthodox tuning law. Amplitude terms are disabled because the published SPL values are strike/time/measurement dependent and are not a transferable modal-amplitude target."
+  },
+  "frequency_reference": {
+    "mode": {
+      "selector": "sorted_index",
+      "index": 1
+    },
+    "target_hz": 440.0
+  },
+  "frequency_targets": [
+    {
+      "mode": {
+        "selector": "sorted_index",
+        "index": 0
+      },
+      "ratio": 0.51,
+      "weight": 1.0,
+      "label": "F1"
+    },
+    {
+      "mode": {
+        "selector": "sorted_index",
+        "index": 2
+      },
+      "ratio": 1.26,
+      "weight": 1.0,
+      "label": "F2"
+    },
+    {
+      "mode": {
+        "selector": "sorted_index",
+        "index": 3
+      },
+      "ratio": 1.64,
+      "weight": 1.0,
+      "label": "F3"
+    },
+    {
+      "mode": {
+        "selector": "sorted_index",
+        "index": 4
+      },
+      "ratio": 2.19,
+      "weight": 1.0,
+      "label": "F4"
+    }
+  ],
+  "amplitude_targets": [
+    {
+      "mode": {
+        "selector": "sorted_index",
+        "index": 1
+      },
+      "reference_mode": {
+        "selector": "sorted_index",
+        "index": 0
+      },
+      "ratio": 0.8,
+      "weight": 0.0,
+      "label": "A2"
+    },
+    {
+      "mode": {
+        "selector": "sorted_index",
+        "index": 2
+      },
+      "reference_mode": {
+        "selector": "sorted_index",
+        "index": 0
+      },
+      "ratio": 0.6,
+      "weight": 0.0,
+      "label": "A3"
+    },
+    {
+      "mode": {
+        "selector": "sorted_index",
+        "index": 3
+      },
+      "reference_mode": {
+        "selector": "sorted_index",
+        "index": 0
+      },
+      "ratio": 0.4,
+      "weight": 0.0,
+      "label": "A4"
+    },
+    {
+      "mode": {
+        "selector": "sorted_index",
+        "index": 4
+      },
+      "reference_mode": {
+        "selector": "sorted_index",
+        "index": 0
+      },
+      "ratio": 0.2,
+      "weight": 0.0,
+      "label": "A5"
+    }
+  ]
 }

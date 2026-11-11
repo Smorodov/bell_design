@@ -51,6 +51,43 @@ BellGeometry loadGeometry(const std::string& filename) {
 
 struct RenderMode { double omega, alpha, q0, v0; std::complex<double> radiation; };
 
+struct AdaptiveModalReport {
+    int requested_modes = 0;
+    int solve_count = 0;
+    double maximum_frequency_hz = 0.0;
+    bool frequency_ceiling_reached = false;
+    bool expansion_failed = false;
+};
+
+bool evaluateAdaptiveModalBand(const FEM::CylindricalBellModel& model,
+                               const ModalInfluence& influence,
+                               FEM::CylindricalModalEvaluationConfig config,
+                               double ceiling_hz, int maximum_requested_modes,
+                               ModalData& result, AdaptiveModalReport& report) {
+    if (!std::isfinite(ceiling_hz) || ceiling_hz <= 0.0 ||
+        maximum_requested_modes < config.requested_modes) return false;
+    const int initial = config.requested_modes;
+    for (int request = initial; ; request = std::min(maximum_requested_modes, request * 2)) {
+        config.requested_modes = request;
+        ++report.solve_count;
+        ModalData candidate;
+        if (!FEM::evaluate_cylindrical_bell_modes(model, influence, config, candidate)) {
+            if (report.solve_count == 1) return false;
+            report.expansion_failed = true;
+            break; // Keep the last complete lower-band solution.
+        }
+        result = std::move(candidate);
+        report.requested_modes = request;
+        report.maximum_frequency_hz = 0.0;
+        for (const auto& mode : result.modes)
+            if (std::isfinite(mode.frequency_hz))
+                report.maximum_frequency_hz = std::max(report.maximum_frequency_hz, mode.frequency_hz);
+        report.frequency_ceiling_reached = report.maximum_frequency_hz >= ceiling_hz;
+        if (report.frequency_ceiling_reached || request >= maximum_requested_modes) break;
+    }
+    return !result.modes.empty();
+}
+
 double fourierValue(const std::vector<double>& values, std::size_t point,
                     std::size_t pointCount, const std::vector<int>& labels, double angle) {
     if (values.size() != pointCount * labels.size()) return 0.0;
@@ -74,7 +111,8 @@ int command_synthesize_contact(int argc, char* argv[]) {
     double hertzStiffness = 2.0e7, contactStep = 2.0e-6, contactDuration = 0.025;
     double t60 = 5.0, audioDuration = 6.0;
     double strikeAzimuthDeg = 0.0, listenerPolarDeg = 30.0, listenerAzimuthDeg = 0.0;
-        int sampleRate = 48000, meshNodes = 71;
+    std::string normalizationMode = "peak";
+    int sampleRate = 48000, meshNodes = 71, modalMaxModes = 192;
     bool geometrySet = false;
     for (int i = 1; i < argc; ++i) {
         const std::string a = argv[i];
@@ -84,8 +122,8 @@ int command_synthesize_contact(int argc, char* argv[]) {
         };
         if (a == "--help" || a == "-h") {
             std::cout << "Usage: bell synth-contact [geometry.json] [--output file.wav] [--strike-height 0..1] "
-                         "[--t60 seconds] [--duration seconds] [--sample-rate hz] [--mesh-nodes n] [--strike-azimuth-deg deg] [--listener-polar-deg deg] [--listener-azimuth-deg deg] [--workdir dir]\n"
-                         "Fourier-resolved localized strike and directional far-field modal radiation; output is peak-normalized, not calibrated SPL.\n";
+                         "[--t60 seconds] [--duration seconds] [--sample-rate hz] [--mesh-nodes n] [--modal-max-modes n] [--normalization peak|none] [--strike-azimuth-deg deg] [--listener-polar-deg deg] [--listener-azimuth-deg deg] [--workdir dir]\n"
+                         "Fourier-resolved localized strike and directional far-field modal radiation; --normalization none writes float32 proxy levels, not calibrated SPL.\n";
             return 0;
         } else if (a == "--output") output = value("--output");
         else if (a == "--workdir") workdir = value("--workdir");
@@ -94,6 +132,7 @@ int command_synthesize_contact(int argc, char* argv[]) {
         else if (a == "--duration") audioDuration = std::stod(value("--duration"));
         else if (a == "--sample-rate") sampleRate = std::stoi(value("--sample-rate"));
         else if (a == "--mesh-nodes") meshNodes = std::stoi(value("--mesh-nodes"));
+        else if (a == "--normalization") normalizationMode = value("--normalization");
         else if (a == "--strike-azimuth-deg") strikeAzimuthDeg = std::stod(value("--strike-azimuth-deg"));
         else if (a == "--listener-polar-deg") listenerPolarDeg = std::stod(value("--listener-polar-deg"));
         else if (a == "--listener-azimuth-deg") listenerAzimuthDeg = std::stod(value("--listener-azimuth-deg"));
@@ -111,9 +150,12 @@ int command_synthesize_contact(int argc, char* argv[]) {
             std::error_code ec; std::filesystem::current_path(workdir, ec);
             if (ec) throw std::runtime_error("cannot change workdir: " + ec.message());
         }
+        if (normalizationMode != "peak" && normalizationMode != "none")
+            throw std::invalid_argument("--normalization must be peak or none");
         if (!std::isfinite(strikeHeight) || strikeHeight < 0.05 || strikeHeight > 0.98 ||
             !std::isfinite(t60) || t60 <= 0.0 || !std::isfinite(audioDuration) || audioDuration <= 0.1 ||
             sampleRate < 8000 || sampleRate > 192000 || meshNodes < 11 || meshNodes > 101 ||
+            modalMaxModes < 24 || modalMaxModes > 512 ||
             audioDuration * sampleRate > 10000000.0 ||
             !std::isfinite(strikeAzimuthDeg) || !std::isfinite(listenerPolarDeg) ||
             !std::isfinite(listenerAzimuthDeg) || listenerPolarDeg < 0.0 || listenerPolarDeg > 180.0)
@@ -142,8 +184,11 @@ int command_synthesize_contact(int argc, char* argv[]) {
         femConfig.tolerance = 1.0e-6;
         femConfig.minimum_frequency_hz = 1.0;
         ModalData modalData;
-        if (!FEM::evaluate_cylindrical_bell_modes(directModel, influence.make(directModel.mesh_si), femConfig, modalData))
-            throw std::runtime_error("Fourier cylindrical FEM modal solve failed");
+        const double requestedSynthesisCeilingHz = std::min(20000.0, 0.49 * sampleRate);
+        AdaptiveModalReport modalBandReport;
+        if (!evaluateAdaptiveModalBand(directModel, influence.make(directModel.mesh_si), femConfig,
+                                       requestedSynthesisCeilingHz, modalMaxModes, modalData, modalBandReport))
+            throw std::runtime_error("adaptive Fourier cylindrical FEM modal solve failed");
         if (modalData.modes.size() < 3) throw std::runtime_error("FEM returned fewer than three modes");
 
         const double targetZ = geometry.H * strikeHeight;
@@ -198,6 +243,19 @@ int command_synthesize_contact(int argc, char* argv[]) {
         if (release >= impact.contact_force_n.size())
             throw std::runtime_error("hammer did not separate within --contact-duration; increase it or review contact parameters");
 
+        double bellModalEnergyAtRelease = 0.0;
+        for (std::size_t i = 0; i < contactModes.size(); ++i) {
+            const double omega = 2.0 * kPi * contactModes[i].frequency_hz;
+            const double q = impact.modal_displacement[i][release];
+            const double v = impact.modal_velocity[i][release];
+            bellModalEnergyAtRelease += 0.5 * contactModes[i].modal_mass *
+                (v * v + omega * omega * q * q);
+        }
+        const double strikerEnergyAtRelease = 0.5 * strikerMass *
+            impact.striker_velocity_m_per_s[release] * impact.striker_velocity_m_per_s[release];
+        const double bellEnergyTransferFraction = impact.initial_energy_joules > 0.0
+            ? bellModalEnergyAtRelease / impact.initial_energy_joules : 0.0;
+
         std::vector<RenderMode> renderModes;
         renderModes.reserve(contactModes.size());
         for (std::size_t i = 0; i < contactModes.size(); ++i) {
@@ -232,9 +290,13 @@ int command_synthesize_contact(int argc, char* argv[]) {
             peak = std::max(peak, std::abs(pressureProxy));
         }
         if (!(peak > 1.0e-30) || !std::isfinite(peak)) throw std::runtime_error("acoustic radiation proxy is numerically zero");
-        const double scale = 0.95 / peak;
-        for (double& x : audio) x *= scale;
-        if (!Audio::writeMonoPcm16(output, audio, sampleRate)) throw std::runtime_error("failed to write WAV file");
+        const double rawAcousticPeakProxy = peak;
+        double rawSumSquares = 0.0;
+        for (double x : audio) rawSumSquares += x * x;
+        const double rawAcousticRmsProxy = std::sqrt(rawSumSquares / static_cast<double>(audio.size()));
+        const double peakNormalizationGain = normalizationMode == "peak" ? 0.95 / peak : 1.0;
+        for (double& x : audio) x *= peakNormalizationGain;
+        if (!(normalizationMode == "peak" ? Audio::writeMonoPcm16(output, audio, sampleRate) : Audio::writeMonoFloat32(output, audio, sampleRate))) throw std::runtime_error("failed to write WAV file");
 
         std::filesystem::path metadataPath(output);
         metadataPath.replace_extension();
@@ -243,15 +305,29 @@ int command_synthesize_contact(int argc, char* argv[]) {
         if (meta) {
             meta << "BellOptimizer contact-driven modal audio\n"
                  << "Geometry: " << geometryFile << "\nMesh nodes: " << meshNodes << "\n"
-                 << "Modes used: " << renderModes.size() << "\nStrike height fraction: " << strikeHeight << "\n"
+                 << "Modes used: " << renderModes.size() << "\n"
+                 << "Adaptive modal solves: " << modalBandReport.solve_count << "\n"
+                 << "Modal request at final solve: " << modalBandReport.requested_modes << "\n"
+                 << "Maximum returned modal frequency Hz: " << modalBandReport.maximum_frequency_hz << "\n"
+                 << "Requested synthesis ceiling Hz: " << requestedSynthesisCeilingHz << "\n"
+                 << "Synthesis frequency band covered: " << (modalBandReport.frequency_ceiling_reached ? "yes" :
+                     (modalBandReport.expansion_failed ? "no; further expansion failed, previous solution retained" : "no; modal cap reached")) << "\n"
+                 << "Strike height fraction: " << strikeHeight << "\n"
                  << "Strike azimuth deg: " << strikeAzimuthDeg << "\nListener polar deg from bell axis: " << listenerPolarDeg
                  << "\nListener azimuth deg: " << listenerAzimuthDeg << "\n"
                  << "Striker mass kg: " << strikerMass << "\nStriker velocity m/s: " << strikerVelocity << "\n"
                  << "Hertz stiffness N/m^1.5: " << hertzStiffness << "\nContact duration s: " << impact.contact_duration_seconds << "\n"
                  << "Peak force N: " << *std::max_element(impact.contact_force_n.begin(), impact.contact_force_n.end()) << "\n"
+                 << "Initial striker energy J: " << impact.initial_energy_joules << "\n"
+                 << "Bell modal energy at release J: " << bellModalEnergyAtRelease << "\n"
+                 << "Striker kinetic energy at release J: " << strikerEnergyAtRelease << "\n"
+                 << "Bell energy transfer fraction: " << bellEnergyTransferFraction << "\n"
+                 << "Raw acoustic peak proxy: " << rawAcousticPeakProxy << "\n"
+                 << "Raw acoustic RMS proxy: " << rawAcousticRmsProxy << "\n"
+                 << "Peak normalization gain: " << peakNormalizationGain << "\n"
                  << "Contact energy relative error: " << impact.maximum_relative_energy_error << "\n"
                  << "T60 s: " << t60 << "\nSample rate Hz: " << sampleRate << "\n"
-                 << "Output normalization: peak 0.95 (not calibrated SPL)\n"
+                 << "Output normalization: " << normalizationMode << (normalizationMode == "peak" ? " (peak 0.95; PCM16; absolute level removed)\n" : " (float32 raw proxy level; not calibrated SPL)\n")
                  << "Excitation scope: full real Fourier basis m=0..3 evaluated at strike azimuth " << strikeAzimuthDeg << " deg\n"
                  << "Radiation: directional far-field surface integral at elevation " << listenerPolarDeg << " deg from bell axis, azimuth " << listenerAzimuthDeg << " deg; linear acoustic far-field approximation, not calibrated SPL\n"
                  << "Modal frequencies Hz:";
@@ -285,7 +361,8 @@ int command_synthesize_clapper(int argc, char* argv[]) {
     double listenerDistance = 3.0, earSpacing = 0.18, headYawDeg = 0.0;
     bool stereoOutput = false;
     std::string stereoRadiationModel = "far-field";
-    int sampleRate = 48000, meshNodes = 71;
+    std::string normalizationMode = "peak";
+    int sampleRate = 48000, meshNodes = 71, modalMaxModes = 192;
     bool geometrySet = false;
     for (int i = 1; i < argc; ++i) {
         const std::string a = argv[i];
@@ -297,13 +374,15 @@ int command_synthesize_clapper(int argc, char* argv[]) {
             std::cout << "Usage: bell synth-clapper [geometry.json] [--output file.wav] [--clapper-mass kg] "
                          "[--clapper-inertia kg-m2] [--com-length m] [--tip-length m] [--tip-radius m] "
                          "[--pivot-z m] [--initial-angle-deg deg] [--initial-angular-velocity rad/s] "
-                         "[--contact-step s] [--impact-horizon s] [--material-preset id] [--t60 s] [--decay-model fixed-t60|structural-loss] [--loss-factor eta] [--duration s] "
-                         "[--strike-azimuth-deg deg] [--listener-polar-deg deg] [--listener-azimuth-deg deg] [--stereo] [--stereo-radiation far-field|finite-distance] [--listener-distance m] [--ear-spacing m] [--head-yaw-deg deg]\n"
+                         "[--contact-step s] [--impact-horizon s] [--modal-max-modes n] [--material-preset id] [--t60 s] [--decay-model fixed-t60|structural-loss] [--loss-factor eta] [--duration s] "
+                         "[--strike-azimuth-deg deg] [--listener-polar-deg deg] [--listener-azimuth-deg deg] [--stereo] [--stereo-radiation far-field|finite-distance] [--listener-distance m] [--ear-spacing m] [--head-yaw-deg deg] [--normalization peak|none]\n"
                          "Planar physical pendulum + internal spherical Hertz contact + Fourier FEM + far-field modal radiation.\n";
             return 0;
         } else if (a == "--output") output = value("--output");
         else if (a == "--workdir") workdir = value("--workdir");
         else if (a == "--mesh-nodes") meshNodes = std::stoi(value("--mesh-nodes"));
+        else if (a == "--modal-max-modes") modalMaxModes = std::stoi(value("--modal-max-modes"));
+        else if (a == "--normalization") normalizationMode = value("--normalization");
         else if (a == "--clapper-mass") clapperMass = std::stod(value("--clapper-mass"));
         else if (a == "--clapper-inertia") inertia = std::stod(value("--clapper-inertia"));
         else if (a == "--com-length") comLength = std::stod(value("--com-length"));
@@ -341,6 +420,8 @@ int command_synthesize_clapper(int argc, char* argv[]) {
             std::error_code ec; std::filesystem::current_path(workdir, ec);
             if (ec) throw std::runtime_error("cannot change workdir: " + ec.message());
         }
+        if (normalizationMode != "peak" && normalizationMode != "none")
+            throw std::invalid_argument("--normalization must be peak or none");
         if (!std::isfinite(clapperMass) || clapperMass <= 0.0 || !std::isfinite(comLength) || comLength <= 0.0 ||
             !std::isfinite(tipLength) || tipLength <= 0.0 || !std::isfinite(tipRadius) || tipRadius <= 0.0 ||
             !std::isfinite(pivotR) || pivotR < 0.0 || !std::isfinite(initialAngleDeg) ||
@@ -350,6 +431,7 @@ int command_synthesize_clapper(int argc, char* argv[]) {
             !std::isfinite(t60) || t60 <= 0.0 || (lossFactorOverride && !std::isfinite(structuralLossFactor)) ||
             !std::isfinite(audioDuration) || audioDuration <= 0.1 ||
             sampleRate < 8000 || sampleRate > 192000 || meshNodes < 11 || meshNodes > 101 ||
+            modalMaxModes < 24 || modalMaxModes > 512 ||
             audioDuration * sampleRate > 10000000.0 || !std::isfinite(strikeAzimuthDeg) ||
             !std::isfinite(listenerPolarDeg) || listenerPolarDeg < 0.0 || listenerPolarDeg > 180.0 ||
             !std::isfinite(listenerAzimuthDeg) || !std::isfinite(listenerDistance) || listenerDistance <= 0.25 ||
@@ -400,8 +482,11 @@ int command_synthesize_clapper(int argc, char* argv[]) {
         femConfig.tolerance = 1.0e-6;
         femConfig.minimum_frequency_hz = 1.0;
         ModalData modalData;
-        if (!FEM::evaluate_cylindrical_bell_modes(directModel, influence.make(directModel.mesh_si), femConfig, modalData))
-            throw std::runtime_error("Fourier cylindrical FEM modal solve failed");
+        const double requestedSynthesisCeilingHz = std::min(20000.0, 0.49 * sampleRate);
+        AdaptiveModalReport modalBandReport;
+        if (!evaluateAdaptiveModalBand(directModel, influence.make(directModel.mesh_si), femConfig,
+                                       requestedSynthesisCeilingHz, modalMaxModes, modalData, modalBandReport))
+            throw std::runtime_error("adaptive Fourier cylindrical FEM modal solve failed");
 
         std::vector<const ModalMode*> usedModes;
         for (const auto& m : modalData.modes) {
@@ -412,6 +497,9 @@ int command_synthesize_clapper(int argc, char* argv[]) {
             usedModes.push_back(&m);
         }
         if (usedModes.size() < 3) throw std::runtime_error("insufficient modes with both inner and outer boundary fields");
+        double maximumAvailableModeFrequencyHz = 0.0;
+        for (const ModalMode* mode : usedModes)
+            maximumAvailableModeFrequencyHz = std::max(maximumAvailableModeFrequencyHz, mode->frequency_hz);
 
         std::vector<Point2D> innerProfileSi = directModel.mesh_si.inner_profile;
         if (!std::isfinite(pivotZ)) pivotZ = innerProfileSi.front().z - 0.07;
@@ -453,6 +541,7 @@ int command_synthesize_clapper(int argc, char* argv[]) {
             double modal_mass;
             double q_release;
             double v_release;
+            double modal_energy_joules;
             double alpha;
             double t60_mode;
             std::complex<double> radiation;
@@ -527,7 +616,9 @@ int command_synthesize_clapper(int argc, char* argv[]) {
             radiationLeft.push_back(radL * leftRangeScale);
             radiationRight.push_back(radR * rightRangeScale);
             modeAuditRows.push_back({usedModes[i]->frequency_hz, usedModes[i]->modal_mass,
-                                     qRelease, vRelease, alpha, decay.t60_seconds, stereoOutput ? 0.5 * (radL + radR) : centreRadiation});
+                                     qRelease, vRelease, impact.modal_energy_at_separation_joules.at(i),
+                                     alpha, decay.t60_seconds,
+                                     stereoOutput ? 0.5 * (radL + radR) : centreRadiation});
         }
         if (renderModes.size() < 3) throw std::runtime_error("fewer than three underdamped radiating modes remain");
 
@@ -568,23 +659,32 @@ int command_synthesize_clapper(int argc, char* argv[]) {
             }
         }
         if (!(peak > 1.0e-30) || !std::isfinite(peak)) throw std::runtime_error("acoustic radiation proxy is numerically zero");
-        const double scale = 0.95 / peak;
+        const double rawAcousticPeakProxy = peak;
+        double rawSumSquares = 0.0;
         if (stereoOutput) {
-            for (double& x : audioLeft) x *= scale;
-            for (double& x : audioRight) x *= scale;
+            for (std::size_t i = 0; i < count; ++i)
+                rawSumSquares += 0.5 * (audioLeft[i] * audioLeft[i] + audioRight[i] * audioRight[i]);
         } else {
-            for (double& x : audio) x *= scale;
+            for (double x : audio) rawSumSquares += x * x;
+        }
+        const double rawAcousticRmsProxy = std::sqrt(rawSumSquares / static_cast<double>(count));
+        const double peakNormalizationGain = normalizationMode == "peak" ? 0.95 / peak : 1.0;
+        if (stereoOutput) {
+            for (double& x : audioLeft) x *= peakNormalizationGain;
+            for (double& x : audioRight) x *= peakNormalizationGain;
+        } else {
+            for (double& x : audio) x *= peakNormalizationGain;
         }
         double sumSquares = 0.0;
         if (stereoOutput) {
             for (std::size_t i = 0; i < count; ++i) sumSquares += 0.5 * (audioLeft[i]*audioLeft[i] + audioRight[i]*audioRight[i]);
-            if (!Audio::writeStereoPcm16(output, audioLeft, audioRight, sampleRate)) throw std::runtime_error("failed to write stereo WAV file");
+            if (!(normalizationMode == "peak" ? Audio::writeStereoPcm16(output, audioLeft, audioRight, sampleRate) : Audio::writeStereoFloat32(output, audioLeft, audioRight, sampleRate))) throw std::runtime_error("failed to write stereo WAV file");
         } else {
             for (double x : audio) sumSquares += x * x;
-            if (!Audio::writeMonoPcm16(output, audio, sampleRate)) throw std::runtime_error("failed to write mono WAV file");
+            if (!(normalizationMode == "peak" ? Audio::writeMonoPcm16(output, audio, sampleRate) : Audio::writeMonoFloat32(output, audio, sampleRate))) throw std::runtime_error("failed to write mono WAV file");
         }
         const double rms = std::sqrt(sumSquares / static_cast<double>(count));
-        const double crestFactor = rms > 0.0 ? 0.95 / rms : 0.0;
+        const double crestFactor = rms > 0.0 ? peak / rms : 0.0;
 
         const double topZ = innerProfileSi.front().z;
         const double mouthZ = innerProfileSi.back().z;
@@ -597,11 +697,11 @@ int command_synthesize_clapper(int argc, char* argv[]) {
         modesPath.replace_extension(); modesPath += "_modes.csv";
         std::ofstream modesFile(modesPath);
         if (modesFile) {
-            modesFile << "frequency_hz,modal_mass_kg,q_at_separation_m,v_at_separation_m_per_s,decay_alpha_per_s,mode_t60_s,radiation_real,radiation_imag,radiation_magnitude\n";
+            modesFile << "frequency_hz,modal_mass_kg,q_at_separation_m,v_at_separation_m_per_s,modal_energy_at_separation_j,decay_alpha_per_s,mode_t60_s,radiation_real,radiation_imag,radiation_magnitude\n";
             modesFile << std::setprecision(17);
             for (const auto& row : modeAuditRows)
                 modesFile << row.frequency_hz << ',' << row.modal_mass << ',' << row.q_release << ','
-                          << row.v_release << ',' << row.alpha << ',' << row.t60_mode << ','
+                          << row.v_release << ',' << row.modal_energy_joules << ',' << row.alpha << ',' << row.t60_mode << ','
                           << row.radiation.real() << ',' << row.radiation.imag()
                           << ',' << std::abs(row.radiation) << '\n';
         }
@@ -612,6 +712,12 @@ int command_synthesize_clapper(int argc, char* argv[]) {
         if (meta) {
             meta << "BellOptimizer internal clapper physical-pendulum synthesis\n"
                  << "Geometry: " << geometryFile << "\nMesh nodes: " << meshNodes << "\nModes used: " << renderModes.size() << "\n"
+                 << "Adaptive modal solves: " << modalBandReport.solve_count << "\n"
+                 << "Modal request at final solve: " << modalBandReport.requested_modes << "\n"
+                 << "Maximum returned modal frequency Hz: " << modalBandReport.maximum_frequency_hz << "\n"
+                 << "Maximum available modal frequency Hz: " << maximumAvailableModeFrequencyHz << "\n"
+                 << "Requested synthesis ceiling Hz: " << requestedSynthesisCeilingHz << "\n"
+                 << "Synthesis band covered: " << (maximumAvailableModeFrequencyHz >= requestedSynthesisCeilingHz ? "yes" : "no") << "\n"
                  << "Clapper mass kg: " << clapperMass << "\nPivot r,z m: " << pivotR << ", " << pivotZ << "\n"
                  << "COM length m: " << comLength << "\nTip centre length m: " << tipLength << "\nTip radius m: " << tipRadius << "\n"
                  << "Pivot inertia kg m2: " << inertia << "\nInitial angle deg: " << initialAngleDeg
@@ -625,6 +731,14 @@ int command_synthesize_clapper(int argc, char* argv[]) {
                  << "\nFirst contact surface point r,z m: " << impact.first_contact_surface_r_m << ", " << impact.first_contact_surface_z_m
                  << "\nStrike height fraction (0=top, 1=mouth): " << strikeFraction
                  << "\nStrike height in requested typical band 0.50..0.70: " << (strikeInTypicalBand ? "yes" : "no")
+                 << "\nInitial clapper energy J: " << impact.initial_energy_joules
+                 << "\nBell modal energy at separation J: " << impact.bell_modal_energy_joules
+                 << "\nClapper energy at separation J: " << impact.clapper_energy_at_separation_joules
+                 << "\nBell energy transfer fraction: " << impact.bell_energy_transfer_fraction
+                 << "\nTotal energy at separation J: " << impact.final_energy_joules
+                 << "\nRaw acoustic peak proxy: " << rawAcousticPeakProxy
+                 << "\nRaw acoustic RMS proxy: " << rawAcousticRmsProxy
+                 << "\nPeak normalization gain: " << peakNormalizationGain
                  << "\nConservative energy relative drift: " << impact.maximum_relative_energy_error
                  << "\nMaterial preset: " << materialPreset->id
                  << "\nMaterial preset description: " << materialPreset->description
@@ -642,7 +756,8 @@ int command_synthesize_clapper(int argc, char* argv[]) {
                  << "\nEar polar deg (geometric): " << listener.left.polar_rad * 180.0 / kPi << ", " << listener.right.polar_rad * 180.0 / kPi
                  << "\nEar angular separation deg: " << listener.ear_angular_separation_rad * 180.0 / kPi
                  << "\nEar propagation offsets s (relative to centre): " << leftDelay << ", " << rightDelay
-                 << "\nSample rate Hz: " << sampleRate << "\nOutput peak normalization: 0.95 (not calibrated SPL)"
+                 << "\nSample rate Hz: " << sampleRate << "\nOutput normalization: " << normalizationMode
+                 << (normalizationMode == "peak" ? " (peak 0.95; PCM16; absolute level removed)" : " (float32 raw proxy level; not calibrated SPL)")
                  << "\nOutput RMS: " << rms << "\nOutput crest factor: " << crestFactor
                  << "\nModal audit CSV: " << modesPath.string() << "\n"
                  << "Radiation model: " << (stereoOutput ? stereoRadiationModel : "far-field") << "\n"
@@ -657,9 +772,15 @@ int command_synthesize_clapper(int argc, char* argv[]) {
                   << " | first contact=" << impact.first_contact_time_seconds << " s"
                   << " | contact=" << impact.contact_duration_seconds << " s"
                   << " | peak force=" << impact.peak_contact_force_n << " N"
+                  << " | bell energy=" << std::scientific << impact.bell_modal_energy_joules << " J"
+                  << " | transfer=" << impact.bell_energy_transfer_fraction
                   << " | strike height=" << std::fixed << std::setprecision(1) << (100.0 * strikeFraction) << "%"
                   << " | RMS=" << std::scientific << rms
                   << " | energy drift=" << impact.maximum_relative_energy_error << "\n";
+        if (maximumAvailableModeFrequencyHz < requestedSynthesisCeilingHz)
+            std::cout << "WARNING: modal spectrum ends at " << maximumAvailableModeFrequencyHz
+                      << " Hz, below requested synthesis ceiling " << requestedSynthesisCeilingHz
+                      << " Hz; high-frequency timbre is truncated by the current fixed modal solve.\n";
         if (!strikeInTypicalBand)
             std::cout << "WARNING: first contact is outside the typical 50-70% bell-height band; adjust pivot/trajectory if targeting a conventional strike.\n";
         std::cout << "Mode diagnostics: " << modesPath.string() << "\n";

@@ -164,7 +164,24 @@ struct ModalData {
     double target_rms = 0.70;
     std::string material;
 
-    void clear() { modes.clear(); matrix_audit = {}; fundamental_frequency = 0.0; source_file.clear(); }
+    // Optional audit metadata for optimizer runs scored with the internal clapper.
+    bool clapper_objective_evaluated = false;
+    double clapper_strike_height_fraction = 0.0;
+    double clapper_mass_kg = 0.0;
+    double clapper_moment_of_inertia_kg_m2 = 0.0;
+    double clapper_com_length_m = 0.0;
+    double clapper_tip_length_m = 0.0;
+    double clapper_tip_radius_m = 0.0;
+    double clapper_hertz_stiffness_n_per_m_1_5 = 0.0;
+    double clapper_initial_angular_velocity_rad_s = 0.0;
+
+    void clear() {
+        modes.clear(); matrix_audit = {}; fundamental_frequency = 0.0; source_file.clear();
+        clapper_objective_evaluated = false; clapper_strike_height_fraction = 0.0;
+        clapper_mass_kg = 0.0; clapper_moment_of_inertia_kg_m2 = 0.0;
+        clapper_com_length_m = 0.0; clapper_tip_length_m = 0.0; clapper_tip_radius_m = 0.0;
+        clapper_hertz_stiffness_n_per_m_1_5 = 0.0; clapper_initial_angular_velocity_rad_s = 0.0;
+    }
 
     void sort_by_frequency() {
         std::sort(modes.begin(), modes.end(),
